@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trello Player</title>
+    <link rel="icon" type="image/png" href="./trello-player-192.png">
+    <link rel="manifest" href="./manifest.json">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .list {
+            margin-bottom: 10px;
+        }
+        .card {
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        a {
+            color: blue;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .back-link {
+            display: block;
+            margin-top: 20px;
+        }
+        audio {
+            display: block;
+            margin-top: 10px;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        .controls button {
+            margin-right: 10px;
+        }
+        .attachments {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .attachments li {
+            margin-bottom: 5px;
+        }
+        .active {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="list-name">Trello Player</h1>
+    <div id="form-container">
+        <form id="credentials-form">
+            <label for="api-key">API Key:</label>
+            <input type="text" id="api-key" required><br><br>
+            <label for="token">Token:</label>
+            <input type="text" id="token" required><br><br>
+            <label for="board-id">Board ID:</label>
+            <input type="text" id="board-id" required><br><br>
+            <button type="submit">Save and Load Lists</button>
+        </form>
+    </div>
+    <div id="lists-container" class="hidden"></div>
+    <div id="attachments-container" class="hidden">
+        <audio id="audio-player" controls></audio>
+        <div class="controls">
+            <button id="prev-button">Previous</button>
+            <button id="next-button">Next</button>
+        </div>
+        <ul id="attachments-list" class="attachments"></ul>
+    </div>
+    <a href="#" id="back-link" class="hidden back-link">← Back to Lists</a>
+
+    <script>
+        let currentAttachmentIndex = 0;
+        let m4aAttachments = [];
+        let selectedListName = '';
+        let audioPlayer = document.getElementById('audio-player');
+
+        // Function to fetch and display Trello lists
+        async function fetchLists(apiKey, token, boardId) {
+            try {
+                const listsResponse = await fetch(`https://api.trello.com/1/boards/${boardId}/lists?key=${apiKey}&token=${token}`);
+                const lists = await listsResponse.json();
+
+                const listsContainer = document.getElementById('lists-container');
+                listsContainer.innerHTML = ''; // Clear previous content
+
+                lists.forEach(list => {
+                    const listDiv = document.createElement('div');
+                    listDiv.className = 'list';
+                    listDiv.innerHTML = `<a href="#" data-list-id="${list.id}">${list.name}</a>`;
+                    listsContainer.appendChild(listDiv);
+                });
+
+                // Attach event listeners to list links
+                document.querySelectorAll('#lists-container a').forEach(link => {
+                    link.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        const listId = event.target.getAttribute('data-list-id');
+                        selectedListName = event.target.innerText; // Save selected list name
+                        updateTitle(); // Update title with selected list name
+                        fetchAttachments(apiKey, token, listId);
+                    });
+                });
+            } catch (error) {
+                console.error('Error fetching Trello lists:', error);
+                alert('Failed to load Trello lists. Please check your credentials and try again.');
+            }
+        }
+
+        // Function to fetch and display attachments for a specific list
+        async function fetchAttachments(apiKey, token, listId) {
+            try {
+                // Fetch cards in the list
+                const cardsResponse = await fetch(`https://api.trello.com/1/lists/${listId}/cards?attachments=true&key=${apiKey}&token=${token}`);
+                const cards = await cardsResponse.json();
+
+                const attachmentsList = document.getElementById('attachments-list');
+                attachmentsList.innerHTML = ''; // Clear previous content
+                m4aAttachments = []; // Clear previous attachments
+
+                cards.forEach(card => {
+                    // Filter attachments with .m4a extension
+                    const cardM4aAttachments = card.attachments.filter(attachment => attachment.url.endsWith('.m4a'));
+
+                    cardM4aAttachments.forEach(attachment => {
+                        m4aAttachments.push(attachment);
+
+                        const attachmentLi = document.createElement('li');
+                        attachmentLi.innerHTML = attachment.name;
+                        attachmentsList.appendChild(attachmentLi);
+                    });
+                });
+
+                if (m4aAttachments.length > 0) {
+                    loadAttachment(0);
+                }
+
+                // Show back link and attachments container, hide lists container
+                document.getElementById('lists-container').classList.add('hidden');
+                document.getElementById('attachments-container').classList.remove('hidden');
+                document.getElementById('back-link').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error fetching Trello attachments:', error);
+                alert('Failed to load Trello attachments. Please try again.');
+            }
+        }
+
+        // Function to load a specific attachment in the audio player
+        function loadAttachment(index) {
+            if (index >= 0 && index < m4aAttachments.length) {
+                currentAttachmentIndex = index;
+                audioPlayer.src = m4aAttachments[index].url;
+                audioPlayer.play();
+
+                const attachmentsListItems = document.querySelectorAll('#attachments-list li');
+                attachmentsListItems.forEach((item, idx) => {
+                    item.classList.toggle('active', idx === index);
+                });
+            }
+        }
+
+        // Function to save credentials to local storage
+        function saveCredentials(event) {
+            event.preventDefault();
+            const apiKey = document.getElementById('api-key').value;
+            const token = document.getElementById('token').value;
+            const boardId = document.getElementById('board-id').value;
+
+            localStorage.setItem('trelloApiKey', apiKey);
+            localStorage.setItem('trelloToken', token);
+            localStorage.setItem('trelloBoardId', boardId);
+
+            // Hide form and show lists container
+            document.getElementById('form-container').classList.add('hidden');
+            document.getElementById('lists-container').classList.remove('hidden');
+
+            // Fetch and display lists
+            fetchLists(apiKey, token, boardId);
+        }
+
+        // Check if credentials are stored in local storage
+        function checkStoredCredentials() {
+            const storedApiKey = localStorage.getItem('trelloApiKey');
+            const storedToken = localStorage.getItem('trelloToken');
+            const storedBoardId = localStorage.getItem('trelloBoardId');
+
+            if (storedApiKey && storedToken && storedBoardId) {
+                // Hide form and show lists container
+                document.getElementById('form-container').classList.add('hidden');
+                document.getElementById('lists-container').classList.remove('hidden');
+
+                // Fetch and display lists using stored credentials
+                fetchLists(storedApiKey, storedToken, storedBoardId);
+            } else {
+                // Show form if no credentials are stored
+                document.getElementById('form-container').classList.remove('hidden');
+                document.getElementById('lists-container').classList.add('hidden');
+                document.getElementById('attachments-container').classList.add('hidden');
+            }
+        }
+
+        // Update title with selected list name
+        function updateTitle() {
+            const title = selectedListName ? `Trello Player: ${selectedListName}` : 'Trello Player';
+            document.getElementById('list-name').innerText = title;
+        }
+
+        // Event listeners for navigation buttons
+        document.getElementById('prev-button').addEventListener('click', () => {
+            if (currentAttachmentIndex > 0) {
+                loadAttachment(currentAttachmentIndex - 1);
+            }
+        });
+
+        document.getElementById('next-button').addEventListener('click', () => {
+            if (currentAttachmentIndex < m4aAttachments.length - 1) {
+                loadAttachment(currentAttachmentIndex + 1);
+            }
+        });
+
+        // Event listener for audio ended event
+        audioPlayer.addEventListener('ended', () => {
+            if (currentAttachmentIndex < m4aAttachments.length - 1) {
+                loadAttachment(currentAttachmentIndex + 1);
+            }
+        });
+
+        // Add event listener to the form
+        document.getElementById('credentials-form').addEventListener('submit', saveCredentials);
+
+        // Add event listener to the back link
+        document.getElementById('back-link').addEventListener('click', (event) => {
+            event.preventDefault();
+            audioPlayer.pause(); // Pause audio playback
+            audioPlayer.currentTime = 0; // Reset audio playback position
+
+            document.getElementById('lists-container').classList.remove('hidden');
+            document.getElementById('attachments-container').classList.add('hidden');
+            document.getElementById('back-link').classList.add('hidden');
+            selectedListName = ''; // Clear selected list name
+            updateTitle(); // Update title to "Trello Player"
+        });
+
+        // Check stored credentials on page load
+        window.onload = checkStoredCredentials;
+    </script>
+</body>
+</html>
