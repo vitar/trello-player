@@ -1,5 +1,7 @@
 # trello-player
 
+Note: index.html is initially created with ChatGPT.
+
 Static web page with Trello Player, which plays selected Trello board lists' .m4a attachments.
 
 Hosted: https://vitar.github.io/trello-player/
