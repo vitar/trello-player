@@ -8,6 +8,7 @@ window.TrelloPowerUp.initialize({
         for (const card of list.cards) {
           console.log(card.id);
         }
+        return t.closePopup();
       },
     }];
   },
