@@ -43,4 +43,23 @@ function loadAttachment(index) {
   }
 }
 
+document.getElementById('prev-button').addEventListener('click', () => {
+  if (currentAttachmentIndex > 0) {
+    loadAttachment(currentAttachmentIndex - 1);
+  }
+});
+
+
+document.getElementById('next-button').addEventListener('click', () => {
+  if (currentAttachmentIndex < m4aAttachments.length - 1) {
+    loadAttachment(currentAttachmentIndex + 1);
+  }
+});
+
+audioPlayer.addEventListener('ended', () => {
+  if (currentAttachmentIndex < m4aAttachments.length - 1) {
+    loadAttachment(currentAttachmentIndex + 1);
+  }
+});
+
 window.onload = loadPlayer();
