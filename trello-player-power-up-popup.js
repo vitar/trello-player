@@ -10,7 +10,7 @@ async function loadPlayer() {
     const listInfo = await t.list('cards');
     const cards = listInfo.cards;
     cards.forEach(card => {
-      const cardM4aAttachments = card.attachments.filter(attachment => attachment.url.endsWith('.m4a'));
+      const cardM4aAttachments = card.attachments.filter(attachment => attachment.url.endsWith('.m4a') || attachment.url.endsWith('.mp3'));
       cardM4aAttachments.forEach(attachment => {
         m4aAttachments.push(attachment);
         
