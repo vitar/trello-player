@@ -4,11 +4,10 @@ window.TrelloPowerUp.initialize({
       icon: './trello-player-192.png',
       text: 'Trello Player',
       callback: async function (t) {
-        const list = await t.list('cards');
-        for (const card of list.cards) {
-          console.log(card.id);
-        }
-        return t.closePopup();
+        return t.popup({
+          title: "Trello Player",
+          url: "./trello-player-power-up-popup.html",
+        });
       },
     }];
   },
