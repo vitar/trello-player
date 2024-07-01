@@ -3,8 +3,8 @@ let currentAttachmentIndex = 0;
 let m4aAttachments = [];
 let audioPlayer = document.getElementById('audio-player');
 
-function loadPlayer() {
-  const listInfo = t.list('cards');
+async function loadPlayer() {
+  const listInfo = await t.list('cards');
   for(const card of listInfo.cards) {
     console.log(card.id);
   }
