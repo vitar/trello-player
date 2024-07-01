@@ -4,9 +4,10 @@ window.TrelloPowerUp.initialize({
       icon: './trello-player-192.png',
       text: 'Trello Player',
       callback: async function (t) {
-        return t.popup({
+        return t.modal({
           title: "Trello Player",
           url: "./trello-player-power-up-popup.html",
+          fullscreen: false,
         });
       },
     }];
