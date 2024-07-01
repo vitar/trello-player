@@ -23,6 +23,10 @@ async function loadPlayer() {
     if (m4aAttachments.length > 0) {
       loadAttachment(0);
     }
+
+    t.render(function () {
+      t.sizeTo("#attachments-container").done();
+    });
   }
   catch (error) {
     console.error('Error fetching attachments:', error);
