@@ -38,7 +38,11 @@ function loadAttachment(index) {
   if (index >= 0 && index < m4aAttachments.length) {
     currentAttachmentIndex = index;
     audioPlayer.src = m4aAttachments[index].url;
-    audioPlayer.play();
+    try {
+      audioPlayer.play();
+    }
+    catch (error) {
+    }
     
     const attachmentsListItems = document.querySelectorAll('#attachments-list li');
     attachmentsListItems.forEach((item, idx) => {
