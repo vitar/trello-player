@@ -1,6 +1,6 @@
 # trello-player
 
-Trello Player allows to play .m4a attachments from any list.
+Trello Player allows to play .m4a and .mp3 attachments as a playlisr.
 
 Implementeds as:
 
