@@ -1,0 +1,21 @@
+{
+    "name": "Trello .m4a attachments player",
+    "short_name": "Trello Player",
+    "description": "Trello Player loads selected Trello board list .m4a attachments as a player.",
+    "start_url": "./trello-player.html",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#2196f3",
+    "icons": [
+        {
+            "src": "./trello-player-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "./trello-player-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
