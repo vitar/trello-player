@@ -3,6 +3,7 @@ let currentAttachmentIndex = 0;
 let m4aAttachments = [];
 let audioPlayer = document.getElementById('audio-player');
 let attachmentsList = document.getElementById('attachments-list');
+let waveSurfer;
 
 async function loadPlayer() {
   try {
@@ -37,6 +38,7 @@ function loadAttachment(index) {
   if (index >= 0 && index < m4aAttachments.length) {
     currentAttachmentIndex = index;
     audioPlayer.src = m4aAttachments[index].url;
+    waveSurfer.load(m4aAttachments[index].url);
     const playPromise = audioPlayer.play();
     if (playPromise !== undefined) {
       playPromise.then(_ => {}).catch(error => {});
@@ -68,4 +70,12 @@ audioPlayer.addEventListener('ended', () => {
   }
 });
 
-window.addEventListener('load', loadPlayer);
+window.addEventListener('load', () => {
+  waveSurfer = WaveSurfer.create({
+    container: '#waveform',
+    media: audioPlayer,
+    waveColor: 'lightgreen',
+    progressColor: 'darkgreen'
+  });
+  loadPlayer();
+});
