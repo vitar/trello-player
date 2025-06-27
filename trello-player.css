@@ -65,5 +65,13 @@ audio {
   width: 100%;
 }
 #attachments-container {
-  margin: 20px;
+  --margin: 20px;
+  margin: var(--margin);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: calc(100dvh - var(--margin) * 2);
+}
+
+#attachments-list {
+  overflow-y: auto;
 }
