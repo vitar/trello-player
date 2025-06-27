@@ -29,7 +29,7 @@ async function loadPlayer() {
   }
   catch (error) {
     console.error('Error fetching attachments:', error);
-    alert('Failed to load attachmentas. Please try again.');
+    alert('Failed to load attachments. Please try again.');
   }
 }
 
@@ -68,4 +68,4 @@ audioPlayer.addEventListener('ended', () => {
   }
 });
 
-window.onload = loadPlayer();
+window.addEventListener('load', loadPlayer);
