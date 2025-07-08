@@ -3,10 +3,11 @@
   <head>
     <meta charset="utf-8">
     <title>Audio Player for Trello Power-Up Popup</title>
-    <link rel="stylesheet" href="./trello-player.css?1">
+    <link rel="stylesheet" href="./trello-player.css?3">
   </head>
   <body>
     <div id="attachments-container">
+      <div id="waveform-view"></div>
       <audio id="audio-player" controls></audio>
       <div class="controls">
         <button id="prev-button">Previous</button>
@@ -14,8 +15,21 @@
       </div>
       <ul id="attachments-list" class="attachments"></ul>
     </div>
-    
+
+    <div id="waveform-modal" class="hidden" tabindex="0">
+      <div class="modal-content">
+        <p><a id="download-file" href="" download>Step 1: download file</a></p>
+        <p><a href="#" id="load-file">Step 2: load file</a> <input id="waveform-file-input" type="file" accept="audio/*" class="hidden" /></p>
+        <div id="waveform-preview"></div>
+        <div class="modal-actions">
+          <button id="cancel-waveform">Cancel</button>
+          <button id="save-waveform" disabled>Save</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
-    <script src="./trello-player-power-up-popup.js?1"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="./trello-player-power-up-popup.js?6"></script>
   </body>
 </html>
