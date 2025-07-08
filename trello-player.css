@@ -68,10 +68,43 @@ audio {
   --margin: 20px;
   margin: var(--margin);
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   height: calc(100dvh - var(--margin) * 2);
 }
 
 #attachments-list {
   overflow-y: auto;
+}
+
+#waveform-view {
+  margin-top: 10px;
+}
+
+.wrench {
+  margin-left: 5px;
+  cursor: pointer;
+}
+
+#waveform-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: grid;
+  place-content: center;
+  z-index: 1000;
+}
+
+#waveform-modal.hidden {
+  display: none;
+}
+
+#waveform-modal .modal-content {
+  background: white;
+  padding: 20px;
+  max-width: 500px;
+}
+
+#waveform-modal .modal-actions {
+  margin-top: 10px;
+  text-align: right;
 }
