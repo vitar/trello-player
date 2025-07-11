@@ -87,6 +87,8 @@ function showWaveform(att) {
 
   t.get(att.cardId, 'shared', 'waveformData').then(data => {
     if (data) {
+      wrench.classList.add('floating');
+      waveformView.appendChild(wrench);
       const ws = WaveSurfer.create({
         container: waveformView,
         interact: true,

@@ -78,11 +78,20 @@ audio {
 
 #waveform-view {
   margin-top: 10px;
+  position: relative;
 }
 
 .wrench {
   margin-left: 5px;
   cursor: pointer;
+}
+
+#waveform-view .wrench.floating {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  z-index: 10;
 }
 
 #waveform-modal {
