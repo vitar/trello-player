@@ -81,6 +81,14 @@ audio {
   position: relative;
 }
 
+.waveform-canvas {
+  width: 100%;
+}
+
+.no-waveform-msg {
+  margin-right: 5px;
+}
+
 .wrench {
   margin-left: 5px;
   cursor: pointer;
@@ -116,4 +124,17 @@ audio {
 #waveform-modal .modal-actions {
   margin-top: 10px;
   text-align: right;
+}
+
+waveform-preview {
+  display: block;
+  position: relative;
+}
+
+waveform-preview .delete-waveform {
+  position: absolute;
+  top: 0;
+  right: 0;
+  cursor: pointer;
+  z-index: 10;
 }
