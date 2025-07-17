@@ -6,7 +6,6 @@ let attachmentsList = document.getElementById('attachments-list');
 let waveformView = document.getElementById('waveform-view');
 let waveformTemplate = document.getElementById('waveform-template');
 let attachmentTemplate = document.getElementById('attachment-template');
-let waveformPreviewTemplate = document.getElementById('waveform-preview-template');
 let modal = document.getElementById('waveform-modal');
 let downloadLink = document.getElementById('download-file');
 let loadFileLink = document.getElementById('load-file');
@@ -18,25 +17,31 @@ let deleteWaveform = false;
 class WaveformPreview extends HTMLElement {
   constructor() {
     super();
-    const frag = waveformPreviewTemplate.content.cloneNode(true);
+    const frag = waveformTemplate.content.cloneNode(true);
     this.appendChild(frag);
     this.canvas = this.querySelector('.waveform-canvas');
     this.deleteBtn = this.querySelector('.delete-waveform');
+    this.msg = this.querySelector('.no-waveform-msg');
+    this.wrench = this.querySelector('.wrench');
   }
-  createPlayer() {
+  createPlayer(options = {}) {
     if (this.wavesurfer) {
       this.wavesurfer.destroy();
     }
     this.canvas.innerHTML = '';
-    this.wavesurfer = WaveSurfer.create({container: this.canvas, height:80});
+    this.wavesurfer = WaveSurfer.create(Object.assign({
+      container: this.canvas,
+      height: 80,
+      normalize: true
+    }, options));
     return this.wavesurfer;
   }
-  loadFromData(peaks, duration) {
-    const ws = this.createPlayer();
+  loadFromData(peaks, duration, options = {}) {
+    const ws = this.createPlayer(options);
     ws.load('', peaks, duration);
   }
-  async loadFromUrl(url) {
-    const ws = this.createPlayer();
+  async loadFromUrl(url, options = {}) {
+    const ws = this.createPlayer(options);
     return new Promise((resolve) => {
       ws.once('ready', resolve);
       ws.load(url);
@@ -49,14 +54,23 @@ class WaveformPreview extends HTMLElement {
     }
     this.canvas.innerHTML = '';
     this.hideDeleteButton();
+    this.hideMessage();
+    this.hideWrench();
   }
-  showDeleteButton() { this.deleteBtn.classList.remove('hidden'); }
-  hideDeleteButton() { this.deleteBtn.classList.add('hidden'); }
+  showDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.remove('hidden'); }
+  hideDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.add('hidden'); }
+  showMessage() { if (this.msg) this.msg.classList.remove('hidden'); }
+  hideMessage() { if (this.msg) this.msg.classList.add('hidden'); }
+  showWrench() { if (this.wrench) this.wrench.classList.remove('hidden'); }
+  hideWrench() { if (this.wrench) this.wrench.classList.add('hidden'); }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
   }
   getDuration() {
     return this.wavesurfer.getDuration();
+  }
+  setWrenchHandler(handler) {
+    if (this.wrench) this.wrench.onclick = handler;
   }
 }
 customElements.define('waveform-preview', WaveformPreview);
@@ -125,28 +139,18 @@ document.getElementById('next-button').addEventListener('click', () => {
 });
 
 function showWaveform(att) {
-  waveformView.innerHTML = '';
-  const frag = waveformTemplate.content.cloneNode(true);
-  const msg = frag.querySelector('.no-waveform-msg');
-  const wrench = frag.querySelector('.wrench');
-  const canvas = frag.querySelector('.waveform-canvas');
-  wrench.addEventListener('click', () => openWaveformModal(att));
-
-  waveformView.appendChild(frag);
-
+  waveformView.clear();
+  waveformView.showWrench();
+  waveformView.setWrenchHandler(() => openWaveformModal(att));
   t.get(att.cardId, 'shared', 'waveformData').then(data => {
     if (data) {
-      msg.remove();
-      wrench.classList.add('floating');
-      const ws = WaveSurfer.create({
-        container: canvas,
+      const wfData = JSON.parse(data);
+      waveformView.loadFromData(wfData.peaks, wfData.duration, {
         interact: true,
-        normalize: true,
-        height:80,
         media: audioPlayer
       });
-      const wfData = JSON.parse(data);
-      ws.load('', wfData.peaks, wfData.duration);
+    } else {
+      waveformView.showMessage();
     }
   });
 }
@@ -168,7 +172,7 @@ function openWaveformModal(att) {
   t.get(att.cardId, 'shared', 'waveformData').then(data => {
     if (data) {
       const wfData = JSON.parse(data);
-      waveformPreview.loadFromData(wfData.peaks, wfData.duration);
+      waveformPreview.loadFromData(wfData.peaks, wfData.duration, {interact:false});
       waveformPreview.showDeleteButton();
     } else {
       waveformPreview.hideDeleteButton();
@@ -184,7 +188,7 @@ loadFileLink.addEventListener('click', (e) => {
 fileInput.addEventListener('change', async () => {
   if (fileInput.files.length === 0) return;
   const url = URL.createObjectURL(fileInput.files[0]);
-  await waveformPreview.loadFromUrl(url);
+  await waveformPreview.loadFromUrl(url, {interact:false});
   saveBtn.disabled = false;
   deleteWaveform = false;
   waveformPreview.hideDeleteButton();
