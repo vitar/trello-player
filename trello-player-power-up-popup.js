@@ -30,16 +30,20 @@ class WaveformPreview extends HTMLElement {
       this.wavesurfer.destroy();
     }
     this.canvas.innerHTML = '';
-    this.wavesurfer = WaveSurfer.create(Object.assign({
+    this.wavesurfer = WaveSurfer.create({
       container: this.canvas,
       height: 80,
-      normalize: true
-    }, options));
+      normalize: true,
+      ...options
+    });
     return this.wavesurfer;
   }
   loadFromData(peaks, duration, options = {}) {
-    const ws = this.createPlayer(options);
-    ws.load('', peaks, duration);
+    this.createPlayer({
+      ...options,
+      peaks: peaks,
+      duration: duration
+    });
   }
   async loadFromUrl(url, options = {}) {
     const ws = this.createPlayer(options);
