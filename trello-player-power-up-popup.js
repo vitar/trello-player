@@ -14,6 +14,7 @@ let saveBtn = document.getElementById('save-waveform');
 let cancelBtn = document.getElementById('cancel-waveform');
 let waveformPreview = document.getElementById('waveform-preview');
 let deleteWaveform = false;
+const dummyPeaks = Array(100).fill(0.3);
 class WaveformPreview extends HTMLElement {
   constructor() {
     super();
@@ -131,11 +132,23 @@ document.getElementById('prev-button').addEventListener('click', () => {
   }
 });
 
-
 document.getElementById('next-button').addEventListener('click', () => {
   if (currentAttachmentIndex < m4aAttachments.length - 1) {
     loadAttachment(currentAttachmentIndex + 1);
   }
+});
+
+document.getElementById('play-button').addEventListener('click', () => {
+  audioPlayer.play();
+});
+
+document.getElementById('pause-button').addEventListener('click', () => {
+  audioPlayer.pause();
+});
+
+document.getElementById('stop-button').addEventListener('click', () => {
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
 });
 
 function showWaveform(att) {
@@ -146,10 +159,16 @@ function showWaveform(att) {
     if (data) {
       const wfData = JSON.parse(data);
       waveformView.loadFromData(wfData.peaks, wfData.duration, {
+        normalize: true,
         interact: true,
         media: audioPlayer
       });
     } else {
+      waveformView.loadFromData(dummyPeaks, audioPlayer.duration, {
+        normalize: false,
+        interact: true,
+        media: audioPlayer
+      });
       waveformView.showMessage();
     }
   });
@@ -219,6 +238,15 @@ modal.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeModal(); }
   if (e.key === 'Enter' && !saveBtn.disabled) { saveBtn.click(); }
 });
+
+function outsideClickClose(e) {
+  if (e.target === modal) {
+    closeModal();
+  }
+}
+
+modal.addEventListener('click', outsideClickClose);
+modal.addEventListener('touchstart', outsideClickClose);
 
 audioPlayer.addEventListener('ended', () => {
   if (currentAttachmentIndex < m4aAttachments.length - 1) {
