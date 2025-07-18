@@ -1,8 +1,10 @@
 # Audio Player Power-Up for Trello
 
-Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list.  Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.  The Power-Up can also store a waveform for each attachment in Trello card storage so that the waveform can be displayed later.
+Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list. Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.  The Power-Up can also store a waveform for each attachment in Trello card storage so that the waveform can be displayed later.
 
-The files in this repository are static and can be hosted on any static hosting provider.  GitHub Pages works well&mdash;fork this repository and enable Pages to serve the files.
+<img src="trello-player-screenshot.png" width="600">
+
+The files in this repository are static and can be hosted on any static hosting provider.  GitHub Pages works well &mdash; fork https://github.com/vitar/trello-player/ repository and enable Pages to serve the files.
 
 ## Enabling the Power-Up in Trello
 1. Open the [Trello Power-Up admin page](https://trello.com/power-ups/admin) and choose **New**.
@@ -35,3 +37,26 @@ _Trello mobile apps do not support custom Power-Ups._
 
 ## License
 The project is released under the [Unlicense](LICENSE).  Security issues can be reported by opening an issue in this repository as described in [SECURITY.md](SECURITY.md).
+
+## Development
+The project is being developed and maintained using OpenAI Codex with minimal manual intervention.
+
+There're two repositories used for development and production purposes, each repository is hosted on separate GitHub Pages:
+* https://github.com/vitar/trello-player-dev/ - for development (experimenting and testing).
+* https://github.com/vitar/trello-player/ - for production.
+
+When new features are developed, development repo code will be manually copied to production repo.
+For fork purposes, use https://github.com/vitar/trello-player/ repository.
+
+## Test automation
+The `test` folder contains a small Node.js script that loads
+`trello-player-power-up-popup.html` in a mock Trello environment using
+[jsdom](https://github.com/jsdom/jsdom). The test reads the HTML from disk so it
+always matches the current popup structure. Run `npm install` to fetch the test
+dependency and then run `npm test` to execute `test/power-up-loading-test.js`,
+which verifies that the Power-Up can load attachments when the Trello API is
+mocked.
+
+GitHub Actions can run this test automatically.  A workflow file is provided in
+`.github/workflows/test.yml` that installs dependencies and runs `npm test` on
+every push or pull request targeting `main`.
