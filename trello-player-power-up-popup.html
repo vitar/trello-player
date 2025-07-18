@@ -3,21 +3,26 @@
   <head>
     <meta charset="utf-8">
     <title>Audio Player for Trello Power-Up Popup</title>
-    <link rel="stylesheet" href="./trello-player.css?6">
+    <link rel="stylesheet" href="./trello-player.css?11">
   </head>
   <body>
     <div id="attachments-container">
       <waveform-preview id="waveform-view"></waveform-preview>
-      <audio id="audio-player" controls></audio>
-      <div class="controls">
-        <button id="prev-button">Previous</button>
-        <button id="next-button">Next</button>
+      <div class="player-controls">
+        <button class="circle-btn" id="prev-button" title="Previous">&#x23EE;&#xFE0E;</button> <!-- ⏮ &#x23EE; -->
+        <button class="circle-btn" id="play-button" title="Play">&#x25B6;&#xFE0E;</button> <!-- ▶ &#x25B6; -->
+        <button class="circle-btn" id="pause-button" title="Pause">&#x23F8;&#xFE0E;</button> <!-- ⏸ &#x23F8; -->
+        <button class="circle-btn" id="stop-button" title="Stop">&#x23F9;&#xFE0E;</button> <!-- ⏹ &#x23F9; -->
+        <button class="circle-btn" id="next-button" title="Next">&#x23ED;&#xFE0E;</button> <!-- ⏭ &#x23ED; -->
       </div>
-      <ul id="attachments-list" class="attachments"></ul>
+      <audio id="audio-player"></audio>
+      <div>
+        <ul id="attachments-list" class="attachments"></ul>
+      </div>
     </div>
 
     <template id="waveform-template">
-      <span class="no-waveform-msg hidden">Waveform is unavailable.<br />Click on 🔧 to create waveform.</span>
+      <span class="no-waveform-msg floating hidden">Click on 🔧 to create waveform 👉</span>
       <span class="wrench floating hidden">🔧</span>
       <span class="delete-waveform hidden">🅇</span>
       <div class="waveform-canvas"></div>
@@ -42,6 +47,6 @@
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
-    <script src="./trello-player-power-up-popup.js?13"></script>
+    <script src="./trello-player-power-up-popup.js?21"></script>
   </body>
 </html>
