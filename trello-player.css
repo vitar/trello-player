@@ -48,7 +48,7 @@ body {
   display: none;
 }
 a {
-  color: YellowGreen;
+  color: var(--link-color);
   text-decoration: none;
 }
 a:hover {
