@@ -442,7 +442,7 @@ if (pitchSlider) {
 authorizeBtn.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   apiKey = key;
-  await t.set('board', 'private', 'apikey', key);
+  await t.set('board', 'shared', 'apikey', key);
   const returnUrl = window.location.href.split('#')[0];
   const authUrl = (secret) => {
     return 'https://trello.com/1/authorize?expiration=never' +
@@ -495,13 +495,13 @@ authorizeBtn.addEventListener('click', async () => {
 
 apiKeyInput.addEventListener('change', () => {
   apiKey = apiKeyInput.value.trim();
-  t.set('board', 'private', 'apikey', apiKey);
+  t.set('board', 'shared', 'apikey', apiKey);
 });
 
 window.addEventListener('unload', revokeCurrentObjectUrl);
 
 async function init() {
-  const key = await t.get('board', 'private', 'apikey');
+  const key = await t.get('board', 'shared', 'apikey');
   if (key) apiKeyInput.value = key;
 
   const hashMatch = window.location.hash.match(/token=([^&]+)/);
