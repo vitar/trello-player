@@ -1,0 +1,525 @@
+const t = window.TrelloPowerUp.iframe();
+let currentAttachmentIndex = 0;
+let m4aAttachments = [];
+let audioPlayer = document.getElementById('audio-player');
+let attachmentsList = document.getElementById('attachments-list');
+let waveformView = document.getElementById('waveform-view');
+let waveformTemplate = document.getElementById('waveform-template');
+let attachmentTemplate = document.getElementById('attachment-template');
+let modal = document.getElementById('waveform-modal');
+let cancelBtn = document.getElementById('cancel-waveform');
+let authorizeBtn = document.getElementById('authorize-button');
+let attachmentsContainer = document.getElementById('attachments-container');
+let authForm = document.getElementById('auth-form');
+let apiKeyInput = document.getElementById('apikey-input');
+let pitchSlider = document.getElementById('pitch-slider');
+let pitchDisplay = document.getElementById('pitch-display');
+let trelloToken;
+let apiKey;
+let popup;
+let authMessageHandler;
+const PROXY_URL = 'https://trello-proxy.vitar.workers.dev/';
+let currentObjectUrl = null;
+let currentLoadRequest = 0;
+const PITCH_MIN = -4;
+const PITCH_MAX = 4;
+const PITCH_KEY_PREFIX = 'pitch:';
+let desiredPitchSemitones = 0;
+let audioContext = null;
+let soundtouchNode = null;
+let audioSourceNode = null;
+let soundtouchModulePromise = null;
+
+function isValidToken(token) {
+  const isString = typeof token === 'string';
+  const isTest = /^[a-zA-Z0-9]{64,80}$/i.test(token);
+  return isString && isTest;
+}
+
+function showAuthForm() {
+  authForm.classList.remove('hidden');
+  attachmentsContainer.classList.add('hidden');
+}
+
+function hideAuthForm() {
+  authForm.classList.add('hidden');
+  attachmentsContainer.classList.remove('hidden');
+}
+
+async function validateToken(key, token) {
+  if (!key || !token) return false;
+  try {
+    const resp = await fetch(`https://api.trello.com/1/members/me?key=${key}&token=${token}`);
+    return resp.status === 200;
+  } catch {
+    return false;
+  }
+}
+class WaveformPreview extends HTMLElement {
+  constructor() {
+    super();
+    const frag = waveformTemplate.content.cloneNode(true);
+    this.appendChild(frag);
+    this.canvas = this.querySelector('.waveform-canvas');
+    this.deleteBtn = this.querySelector('.delete-waveform');
+    this.msg = this.querySelector('.no-waveform-msg');
+    this.wrench = this.querySelector('.wrench');
+  }
+  createPlayer(options = {}) {
+    if (this.wavesurfer) {
+      this.wavesurfer.destroy();
+    }
+    this.canvas.innerHTML = '';
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+    this.wavesurfer = WaveSurfer.create({
+      container: this.canvas,
+      height: 80,
+      normalize: true,
+      fetchParans: { signal },
+      ...options
+    });
+    this.wavesurfer.on('destroy', () => {
+      abortController.abort();
+    })
+    return this.wavesurfer;
+  }
+  loadFromData(peaks, duration, options = {}) {
+    this.createPlayer({
+      ...options,
+      peaks: peaks,
+      duration: duration
+    });
+  }
+  loadFromUrl(url, options = {}) {
+    this.createPlayer({
+      ...options,
+      url: url
+    });
+  }
+  clear() {
+    if (this.wavesurfer) {
+      this.wavesurfer.destroy();
+      this.wavesurfer = null;
+    }
+    this.canvas.innerHTML = '';
+    this.hideDeleteButton();
+    this.hideMessage();
+    this.hideWrench();
+  }
+  showDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.remove('hidden'); }
+  hideDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.add('hidden'); }
+  showMessage() { if (this.msg) this.msg.classList.remove('hidden'); }
+  hideMessage() { if (this.msg) this.msg.classList.add('hidden'); }
+  showWrench() { if (this.wrench) this.wrench.classList.remove('hidden'); }
+  hideWrench() { if (this.wrench) this.wrench.classList.add('hidden'); }
+  exportPeaks() {
+    return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
+  }
+  getDuration() {
+    return this.wavesurfer.getDuration();
+  }
+  setWrenchHandler(handler) {
+    if (this.wrench) this.wrench.onclick = handler;
+  }
+}
+customElements.define('waveform-preview', WaveformPreview);
+
+function revokeCurrentObjectUrl() {
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = null;
+  }
+}
+
+async function fetchAttachmentAudio(originalUrl) {
+  if (!trelloToken) {
+    throw new Error('Missing Trello token');
+  }
+  const proxiedUrl = `${PROXY_URL}?url=${encodeURIComponent(originalUrl)}`;
+  const auth = `OAuth oauth_consumer_key="${apiKey}", oauth_token="${trelloToken}"`;
+  const response = await fetch(proxiedUrl, {
+    headers: {
+      'x-trello-auth': auth
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Proxy request failed with status ${response.status}`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+function clampPitch(value) {
+  if (Number.isNaN(value)) return 0;
+  return Math.min(PITCH_MAX, Math.max(PITCH_MIN, value));
+}
+
+function getPitchStorageKey(attachment) {
+  return `${PITCH_KEY_PREFIX}${attachment.cardId}:${attachment.id}`;
+}
+
+function updatePitchUI(value) {
+  if (pitchSlider) pitchSlider.value = value;
+  if (pitchDisplay) {
+    const formatted = value > 0 ? `+${value}` : `${value}`;
+    pitchDisplay.textContent = formatted;
+  }
+}
+
+function setPitchControlsEnabled(enabled) {
+  if (pitchSlider) pitchSlider.disabled = !enabled;
+}
+
+function updateSoundtouchPitch(value) {
+  if (!soundtouchNode || !audioContext) return;
+  try {
+    const param = soundtouchNode.parameters?.get('pitchSemitones');
+    if (param) {
+      param.setValueAtTime(value, audioContext.currentTime);
+    } else {
+      soundtouchNode.port?.postMessage({ type: 'pitchSemitones', value });
+    }
+  } catch (error) {
+    console.error('Unable to update pitch parameter:', error);
+  }
+}
+
+async function resumeAudioContext() {
+  if (audioContext && audioContext.state === 'suspended') {
+    try {
+      await audioContext.resume();
+    } catch (error) {
+      console.warn('Audio context resume blocked:', error);
+    }
+  }
+}
+
+async function ensureSoundtouchNode() {
+  if (soundtouchNode) {
+    return soundtouchNode;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContext();
+  }
+  if (!soundtouchModulePromise) {
+    soundtouchModulePromise = audioContext.audioWorklet.addModule('./soundtouch-worklet.js').catch((error) => {
+      console.error('Failed to load SoundTouch worklet:', error);
+      throw error;
+    });
+  }
+  try {
+    await soundtouchModulePromise;
+  } catch (error) {
+    throw error;
+  }
+  try {
+    soundtouchNode = new AudioWorkletNode(audioContext, 'soundtouch-processor');
+  } catch (error) {
+    console.error('Failed to create SoundTouch node:', error);
+    soundtouchNode = null;
+    throw error;
+  }
+  soundtouchNode.connect(audioContext.destination);
+  if (!audioSourceNode) {
+    audioSourceNode = audioContext.createMediaElementSource(audioPlayer);
+  } else {
+    try {
+      audioSourceNode.disconnect();
+    } catch (error) {
+      console.warn('Audio source disconnect failed:', error);
+    }
+  }
+  audioSourceNode.connect(soundtouchNode);
+  updateSoundtouchPitch(desiredPitchSemitones);
+  return soundtouchNode;
+}
+
+async function applyPitchValue(value, { persist = false } = {}) {
+  const clamped = clampPitch(value);
+  desiredPitchSemitones = clamped;
+  updatePitchUI(clamped);
+  try {
+    await ensureSoundtouchNode();
+    await resumeAudioContext();
+    updateSoundtouchPitch(clamped);
+  } catch (error) {
+    console.warn('Pitch shift unavailable:', error);
+  }
+  if (persist) {
+    const attachment = m4aAttachments[currentAttachmentIndex];
+    if (attachment) {
+      try {
+        await t.set('board', 'shared', getPitchStorageKey(attachment), clamped);
+      } catch (error) {
+        console.error('Failed to save pitch preference:', error);
+      }
+    }
+  }
+}
+
+async function loadPlayer(token, key) {
+  try {
+    m4aAttachments = [];
+    attachmentsList.innerHTML = '';
+    setPitchControlsEnabled(false);
+    const listInfo = await t.list('id');
+    const response = await fetch(`https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${key}&token=${token}`);
+    const cards = await response.json();
+    cards.forEach(card => {
+      const cardM4aAttachments = card.attachments.filter(attachment => attachment.url.endsWith('.m4a') || attachment.url.endsWith('.mp3'));
+      cardM4aAttachments.forEach(attachment => {
+        m4aAttachments.push(Object.assign({cardId: card.id}, attachment));
+
+        const li = attachmentTemplate.content.firstElementChild.cloneNode(true);
+        li.querySelector('.attachment-name').textContent = attachment.name;
+        li.addEventListener('click', () => {
+          loadAttachment(m4aAttachments.findIndex((att) => att.id === attachment.id));
+        });
+        attachmentsList.appendChild(li);
+      });
+    });
+
+    if (m4aAttachments.length > 0) {
+      await loadAttachment(0);
+    } else {
+      waveformView.clear();
+      revokeCurrentObjectUrl();
+      audioPlayer.pause();
+      audioPlayer.removeAttribute('src');
+      audioPlayer.load();
+      updatePitchUI(0);
+    }
+  }
+  catch (error) {
+    console.error('Error fetching attachments:', error);
+    alert('Failed to load attachments. Please try again.');
+  }
+}
+
+async function loadAttachment(index) {
+  if (index < 0 || index >= m4aAttachments.length) {
+    return;
+  }
+
+  const previousIndex = currentAttachmentIndex;
+  currentAttachmentIndex = index;
+  const loadToken = ++currentLoadRequest;
+  const attachment = m4aAttachments[index];
+
+  const attachmentsListItems = document.querySelectorAll('#attachments-list li');
+  attachmentsListItems.forEach((item, idx) => {
+    item.classList.toggle('active', idx === index);
+  });
+
+  setPitchControlsEnabled(false);
+  let audioUrl;
+  try {
+    audioUrl = await fetchAttachmentAudio(attachment.url);
+    if (loadToken !== currentLoadRequest) {
+      URL.revokeObjectURL(audioUrl);
+      return;
+    }
+    revokeCurrentObjectUrl();
+    currentObjectUrl = audioUrl;
+    audioPlayer.src = audioUrl;
+    audioPlayer.load();
+    const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
+    const pitchValue = clampPitch(Number(storedPitch));
+    await applyPitchValue(pitchValue);
+    setPitchControlsEnabled(true);
+    showWaveform(audioUrl);
+    const playPromise = audioPlayer.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {});
+    }
+  } catch (error) {
+    if (audioUrl && audioUrl !== currentObjectUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    console.error('Failed to load attachment audio:', error);
+    alert('Failed to load audio attachment. Please try again.');
+    currentAttachmentIndex = previousIndex;
+    attachmentsListItems.forEach((item, idx) => {
+      item.classList.toggle('active', idx === currentAttachmentIndex);
+    });
+    setPitchControlsEnabled(m4aAttachments.length > 0);
+    updatePitchUI(desiredPitchSemitones);
+  }
+}
+
+document.getElementById('prev-button').addEventListener('click', () => {
+  if (currentAttachmentIndex > 0) {
+    loadAttachment(currentAttachmentIndex - 1);
+  }
+});
+
+document.getElementById('next-button').addEventListener('click', () => {
+  if (currentAttachmentIndex < m4aAttachments.length - 1) {
+    loadAttachment(currentAttachmentIndex + 1);
+  }
+});
+
+document.getElementById('play-button').addEventListener('click', () => {
+  audioPlayer.play();
+});
+
+document.getElementById('pause-button').addEventListener('click', () => {
+  audioPlayer.pause();
+});
+
+document.getElementById('stop-button').addEventListener('click', () => {
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
+});
+
+function showWaveform(audioUrl) {
+  waveformView.clear();
+  waveformView.showWrench();
+  waveformView.setWrenchHandler(openWaveformModal);
+  try {
+    waveformView.loadFromUrl(audioUrl, {
+      interact: true,
+      media: audioPlayer
+    });
+  } catch (error) {
+    console.error('Failed to render waveform:', error);
+  }
+}
+
+function openWaveformModal() {
+  modal.classList.remove('hidden');
+  modal.focus();
+}
+
+function closeModal() {
+  modal.classList.add('hidden');
+}
+
+cancelBtn.addEventListener('click', closeModal);
+
+modal.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeModal(); }
+});
+
+function outsideClickClose(e) {
+  if (e.target === modal) {
+    closeModal();
+  }
+}
+
+modal.addEventListener('click', outsideClickClose);
+modal.addEventListener('touchstart', outsideClickClose);
+
+audioPlayer.addEventListener('ended', () => {
+  if (currentAttachmentIndex < m4aAttachments.length - 1) {
+    loadAttachment(currentAttachmentIndex + 1);
+  }
+});
+
+audioPlayer.addEventListener('play', async () => {
+  try {
+    await ensureSoundtouchNode();
+    updateSoundtouchPitch(desiredPitchSemitones);
+    await resumeAudioContext();
+  } catch (error) {
+    console.warn('Unable to prepare pitch processor on play:', error);
+  }
+});
+
+if (pitchSlider) {
+  pitchSlider.addEventListener('input', (event) => {
+    const value = Number(event.target.value);
+    applyPitchValue(value);
+  });
+  pitchSlider.addEventListener('change', (event) => {
+    const value = Number(event.target.value);
+    applyPitchValue(value, { persist: true });
+  });
+  setPitchControlsEnabled(false);
+}
+
+authorizeBtn.addEventListener('click', async () => {
+  const key = apiKeyInput.value.trim();
+  apiKey = key;
+  await t.set('board', 'private', 'apikey', key);
+  const returnUrl = window.location.href.split('#')[0];
+  const authUrl = (secret) => {
+    return 'https://trello.com/1/authorize?expiration=never' +
+      '&scope=read&key=' + encodeURIComponent(key) +
+      '&callback_method=postMessage' +
+      '&return_url=' + encodeURIComponent(returnUrl);
+  }
+
+  if (authMessageHandler) {
+    window.removeEventListener('message', authMessageHandler);
+    authMessageHandler = null;
+  }
+
+  authMessageHandler = async (event) => {
+    if (!popup || event.source !== popup) return;
+
+    const token = typeof event.data === 'string' ? event.data.trim() : '';
+    if (!isValidToken(token)) return;
+
+    window.removeEventListener('message', authMessageHandler);
+    authMessageHandler = null;
+
+    if (!(await validateToken(key, token))) {
+      alert('Failed to validate Trello authorization. Please try again.');
+      popup?.close();
+      popup = null;
+      return;
+    }
+
+    await t.set('member', 'private', 'token', token);
+    popup?.close();
+    popup = null;
+    location.reload();
+  };
+
+  window.addEventListener('message', authMessageHandler);
+
+  try {
+    await t.authorize(authUrl, {
+      validToken: isValidToken,
+      windowCallback: (win) => { popup = win; }
+    });
+  } catch (error) {
+    window.removeEventListener('message', authMessageHandler);
+    authMessageHandler = null;
+    popup = null;
+    console.error('Authorization popup failed to open:', error);
+  }
+});
+
+apiKeyInput.addEventListener('change', () => {
+  apiKey = apiKeyInput.value.trim();
+  t.set('board', 'private', 'apikey', apiKey);
+});
+
+window.addEventListener('unload', revokeCurrentObjectUrl);
+
+async function init() {
+  const key = await t.get('board', 'private', 'apikey');
+  if (key) apiKeyInput.value = key;
+
+  const hashMatch = window.location.hash.match(/token=([^&]+)/);
+  if (hashMatch) {
+    await t.set('member', 'private', 'token', hashMatch[1]);
+    window.location.hash = '';
+  }
+
+  const token = await t.get('member', 'private', 'token');
+  apiKey = apiKeyInput.value.trim();
+  if (token && await validateToken(apiKey, token)) {
+    hideAuthForm();
+    trelloToken = token;
+    await loadPlayer(token, apiKey);
+  } else {
+    if (token) await t.set('member', 'private', 'token', null);
+    showAuthForm();
+  }
+}
+
+init();
