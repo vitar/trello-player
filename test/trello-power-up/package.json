@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/power-up-loading-test.js"
+    "test": "node power-up-loading-test.js"
   },
   "devDependencies": {
     "jsdom": "^22.1.0"

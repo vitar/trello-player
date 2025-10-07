@@ -3,10 +3,14 @@
   <head>
     <meta charset="utf-8">
     <title>Audio Player for Trello Power-Up Popup</title>
-    <link rel="stylesheet" href="./trello-player.css?12">
+    <link rel="stylesheet" href="./trello-player.css?16">
   </head>
   <body>
-    <div id="attachments-container">
+    <div id="auth-form">
+      <label>API Key <input id="apikey-input" type="text"></label>
+      <button id="authorize-button" type="button">Authorize</button>
+    </div>
+    <div id="attachments-container" class="hidden">
       <waveform-preview id="waveform-view"></waveform-preview>
       <div class="player-controls">
         <button class="circle-btn" id="prev-button" title="Previous">&#x23EE;&#xFE0E;</button> <!-- ⏮ &#x23EE; -->
@@ -20,7 +24,7 @@
     </div>
 
     <template id="waveform-template">
-      <span class="no-waveform-msg floating hidden">Click on 🔧 to create waveform 👉</span>
+      <span class="no-waveform-msg floating hidden">Waveform tools 🔧</span>
       <span class="wrench floating hidden">🔧</span>
       <span class="delete-waveform hidden">🅇</span>
       <div class="waveform-canvas"></div>
@@ -33,18 +37,26 @@
 
     <div id="waveform-modal" class="hidden" tabindex="0">
       <div class="modal-content">
-        <p><a id="download-file" href="" download>Step 1: download file</a></p>
-        <p><a href="#" id="load-file">Step 2: load file</a> <input id="waveform-file-input" type="file" accept="audio/*" class="hidden" /></p>
-        <waveform-preview id="waveform-preview"></waveform-preview>
+        <div class="modal-section">
+          <h2>Pitch Shift</h2>
+          <div class="pitch-controls">
+            <label for="pitch-slider">Semitone shift</label>
+            <div class="pitch-slider-row">
+              <span class="pitch-limit">-4</span>
+              <input type="range" id="pitch-slider" min="-4" max="4" step="1" value="0">
+              <span class="pitch-limit">+4</span>
+            </div>
+            <div class="pitch-current">Current shift: <span id="pitch-display">0</span></div>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button id="cancel-waveform">Cancel</button>
-          <button id="save-waveform" disabled>Save</button>
+          <button id="cancel-waveform">Close</button>
         </div>
       </div>
     </div>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
-    <script src="./trello-player-power-up-popup.js?22"></script>
+    <script src="./trello-player-power-up-popup.js?39"></script>
   </body>
 </html>
