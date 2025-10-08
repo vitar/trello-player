@@ -97,16 +97,16 @@ jobs:
 
           if [ -n "${PROXY_URL:-}" ]; then
             # Read DEST/PROXY_URL from environment inside Python.
-            python3 - <<-'PY'
-              import json, os, pathlib
-              dest_dir = pathlib.Path(os.environ["DEST"])
-              proxy_url = os.environ["PROXY_URL"]
-              config_lines = [
-                  "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
-                  "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
-              ]
-              (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
-              PY
+            python3 - <<'PY'
+import json, os, pathlib
+dest_dir = pathlib.Path(os.environ["DEST"])
+proxy_url = os.environ["PROXY_URL"]
+config_lines = [
+    "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
+    "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
+]
+(dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
+PY
           fi
 
           touch dist/site/.nojekyll
