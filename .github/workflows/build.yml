@@ -120,14 +120,33 @@ jobs:
           path: dist/site
 
   deploy:
-    # Don’t deploy previews for PR events; you’ll still see the build artifact
-    if: ${{ github.event_name != 'pull_request' }}
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Checkout (empty)
+        uses: actions/checkout@v4
+
+      - name: Download built site
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # PRODUCTION: main → gh-pages root
+      - name: Deploy production (main → /)
+        if: needs.build.outputs.is_main == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          clean: true                # clean root for prod deploys
+
+      # PREVIEW: branches/PRs → gh-pages:/preview/<branch-or-pr> (keep others)
+      - name: Deploy preview (branch/PR → /preview/…)
+        if: needs.build.outputs.is_main != 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          target-folder: ${{ needs.build.outputs.target_folder }}
+          clean: false               # don't wipe existing previews
