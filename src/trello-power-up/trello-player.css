@@ -101,7 +101,7 @@ audio {
 }
 .attachments {
   list-style-type: decimal;
-  padding-left: 0;
+  padding-left: 2rem;
   margin: 0;
 }
 .attachments li {
