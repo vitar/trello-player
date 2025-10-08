@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write     # needed to push to gh-pages
   pages: write        # needed by deploy job
   id-token: write     # needed by deploy job
 
