@@ -72,20 +72,13 @@ jobs:
           fi
 
       - name: Prepare distribution
-        env:
-          TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
         shell: bash
         run: |
           set -euo pipefail
 
           rm -rf dist
-          mkdir -p dist/site
 
           DEST="dist/site"
-          if [ -n "${TARGET_FOLDER}" ]; then
-            DEST="dist/site/${TARGET_FOLDER}"
-          fi
-
           mkdir -p "$DEST"
           cp -R src/trello-power-up/. "$DEST/"
 
@@ -100,7 +93,6 @@ jobs:
         shell: python
         env:
           PROXY_URL: ${{ env.PROXY_URL }}
-          TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
         run: |
           import os, json, pathlib
           base = pathlib.Path("dist/site")
