@@ -114,10 +114,12 @@ jobs:
           )
           (dest / "trello-player-config.js").write_text(js, encoding="utf-8")
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
         with:
-          path: dist/site
+          name: dist
+          path: dist
+          if-no-files-found: warn
 
   deploy:
     needs: build
