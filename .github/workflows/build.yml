@@ -1,83 +1,146 @@
-name: Build and Publish Trello Power-Up
+name: Build & Deploy Power-Up
 
 on:
   push:
-    branches:
-      - '**'
+    branches: ["**"]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: write     # needed to push to gh-pages
+  pages: write        # needed by deploy job
+  id-token: write     # needed by deploy job
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: trello-power-up-pages-${{ github.ref }}
-      cancel-in-progress: true
+    env:
+      PROXY_URL: ${{ vars.PROXY_URL }}
+    outputs:
+      target_folder: ${{ steps.metadata.outputs.target_folder }}
+      is_main:       ${{ steps.metadata.outputs.is_main }}
+      is_pr:         ${{ steps.metadata.outputs.is_pr }}
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Determine target folder
-      id: target
-      run: |
-        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          SAFE="pr-${PR_NUMBER}"
-          SAFE=$(printf '%s' "$SAFE" | tr -c '[:alnum:]._-' '-')
-          SAFE=$(printf '%s' "$SAFE" | sed 's/\-\{2,\}/-/g')
-          SAFE=${SAFE#-}
-          SAFE=${SAFE%-}
-          echo "folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
-        elif [ "$GITHUB_REF_NAME" = "main" ]; then
-          echo "folder=" >> "$GITHUB_OUTPUT"
-        else
-          SAFE=$(printf '%s' "$GITHUB_REF_NAME" | tr -c '[:alnum:]._-/' '-')
-          SAFE=$(printf '%s' "$SAFE" | sed 's/\-\{2,\}/-/g')
-          SAFE=${SAFE#-}
-          SAFE=${SAFE%-}
-          if [ -z "$SAFE" ]; then
-            SAFE="branch"
+      - name: Set deployment metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF_NAME='${{ github.ref_name }}'
+          EVENT_NAME='${{ github.event_name }}'
+          PR_NUMBER='${{ github.event.pull_request.number }}'
+
+          # Make a path-safe token for folder names.
+          sanitize() {
+            local value="$1"
+            # keep A-z0-9, dot, underscore, slash, and hyphen; replace others with '-'
+            value=$(printf '%s' "$value" | LC_ALL=C tr -c -- '[:alnum:]._/-' '-')
+            # collapse multiple dashes
+            value=$(printf '%s' "$value" | sed 's/-\{2,\}/-/g')
+            # trim leading/trailing dashes or slashes
+            value=${value##[-/]}
+            value=${value%%[-/]}
+            [ -z "$value" ] && value="branch"
+            printf '%s' "$value"
+          }
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "is_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_pr=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
-        fi
-      env:
-        GITHUB_EVENT_NAME: ${{ github.event_name }}
-        GITHUB_REF_NAME: ${{ github.ref_name }}
-        PR_NUMBER: ${{ github.event.number }}
 
-    - name: Checkout existing gh-pages branch
-      uses: actions/checkout@v3
-      with:
-        ref: gh-pages
-        path: gh-pages
-      continue-on-error: true
+          if [ "$REF_NAME" = "main" ]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
+            echo "target_folder=" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER}" ]; then
+              SAFE="pr-$(sanitize "$PR_NUMBER")"
+            else
+              SAFE="$(sanitize "$REF_NAME")"
+            fi
+            echo "target_folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
+          fi
 
-    - name: Prepare distribution
-      run: |
-        rm -rf dist
-        mkdir -p dist
-        if [ -d gh-pages ]; then
-          cp -R gh-pages/. dist/
-        fi
+      - name: Prepare distribution
+        shell: bash
+        run: |
+          set -euo pipefail
 
-        TARGET="${{ steps.target.outputs.folder }}"
-        if [ -z "$TARGET" ]; then
-          mkdir -p dist/preview
-          find dist -mindepth 1 -maxdepth 1 ! -name 'preview' ! -name 'CNAME' ! -name '.nojekyll' -exec rm -rf {} +
-          cp -R src/trello-power-up/. dist/
-        else
-          mkdir -p "$(dirname "dist/$TARGET")"
-          rm -rf "dist/$TARGET"
-          mkdir -p "dist/$TARGET"
-          cp -R src/trello-power-up/. "dist/$TARGET/"
-        fi
-        touch dist/.nojekyll
+          rm -rf dist
 
-    - name: Deploy to GitHub Pages
-      uses: JamesIves/github-pages-deploy-action@v4
-      with:
-        branch: gh-pages
-        folder: dist
-        clean: true
+          DEST="dist/site"
+          mkdir -p "$DEST"
+          cp -R src/trello-power-up/. "$DEST/"
+
+          # Make available to later steps, just in case
+          echo "DEST=$DEST" >> "$GITHUB_ENV"
+
+          # GitHub Pages needs this if you use files/folders that start with _
+          touch dist/site/.nojekyll
+
+      - name: Write trello-player-config.js
+        if: ${{ env.PROXY_URL != '' }}
+        shell: python
+        env:
+          PROXY_URL: ${{ env.PROXY_URL }}
+        run: |
+          import os, json, pathlib
+          base = pathlib.Path("dist/site")
+          tf = os.environ.get("TARGET_FOLDER", "")
+          dest = base / tf if tf else base
+          dest.mkdir(parents=True, exist_ok=True)
+          proxy = os.environ["PROXY_URL"]
+          js = (
+            "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n"
+            "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy) + ";\n"
+          )
+          (dest / "trello-player-config.js").write_text(js, encoding="utf-8")
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: warn
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (empty)
+        uses: actions/checkout@v4
+
+      - name: Download built site
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # PRODUCTION: main → gh-pages root
+      - name: Deploy production (main → /)
+        if: needs.build.outputs.is_main == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          clean: true                # clean root for prod deploys
+
+      # PREVIEW: branches/PRs → gh-pages:/preview/<branch-or-pr> (keep others)
+      - name: Deploy preview (branch/PR → /preview/…)
+        if: needs.build.outputs.is_main != 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          target-folder: ${{ needs.build.outputs.target_folder }}
+          clean: false               # don't wipe existing previews
