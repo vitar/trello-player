@@ -53,7 +53,8 @@ jobs:
 
           sanitize() {
             local value="$1"
-            value=$(printf '%s' "$value" | tr -c '[:alnum:]._-/' '-')
+            # Put '-' first and force C locale to avoid collating-range quirks.
+            value=$(printf '%s' "$value" | LC_ALL=C tr -c '-[:alnum:]._/' '-')
             value=$(printf '%s' "$value" | sed 's/-\{2,\}/-/g')
             value=${value#-}
             value=${value%-}
@@ -76,7 +77,8 @@ jobs:
 
       - name: Prepare distribution
         env:
-          TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
+          PROXY_URL: ${{ vars.PROXY_URL }}
+          TARGET_FOLDER: ${{ needs.build.outputs.target_folder }}
         run: |
           set -euo pipefail
 
@@ -94,21 +96,17 @@ jobs:
           cp -R src/trello-power-up/. "$DEST/"
 
           if [ -n "${PROXY_URL:-}" ]; then
-            python3 - "$DEST" "$PROXY_URL" <<'PY'
-            import json
-            import pathlib
-            import sys
-
-            dest_dir = pathlib.Path(sys.argv[1])
-            proxy_url = sys.argv[2]
-
-            config_lines = [
-                "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
-                "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
-            ]
-
-            (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
-            PY
+            # Read DEST/PROXY_URL from environment inside Python.
+            python3 - <<-'PY'
+              import json, os, pathlib
+              dest_dir = pathlib.Path(os.environ["DEST"])
+              proxy_url = os.environ["PROXY_URL"]
+              config_lines = [
+                  "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
+                  "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
+              ]
+              (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
+              PY
           fi
 
           touch dist/site/.nojekyll
