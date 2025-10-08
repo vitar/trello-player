@@ -1,108 +1,151 @@
-name: Build and Publish Trello Power-Up
+
+name: build-and-deploy
 
 on:
   push:
     branches:
+      - main
       - '**'
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: trello-player-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pages: read
+  id-token: none
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      is_main: ${{ steps.metadata.outputs.is_main }}
+      is_pr: ${{ steps.metadata.outputs.is_pr }}
+      target_folder: ${{ steps.metadata.outputs.target_folder }}
+    env:
+      PROXY_URL: ${{ vars.PROXY_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set deployment metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+
+          REF_NAME='${{ github.ref_name }}'
+          EVENT_NAME='${{ github.event_name }}'
+          PR_NUMBER='${{ github.event.pull_request.number }}'
+
+          if [ "$REF_NAME" = "main" ]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "is_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          sanitize() {
+            local value="$1"
+            value=$(printf '%s' "$value" | tr -c '[:alnum:]._-/' '-')
+            value=$(printf '%s' "$value" | sed 's/-\{2,\}/-/g')
+            value=${value#-}
+            value=${value%-}
+            if [ -z "$value" ]; then
+              value="branch"
+            fi
+            printf '%s' "$value"
+          }
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            SAFE="pr-${PR_NUMBER}"
+            SAFE=$(sanitize "$SAFE")
+            echo "target_folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
+          elif [ "$REF_NAME" = "main" ]; then
+            echo "target_folder=" >> "$GITHUB_OUTPUT"
+          else
+            SAFE=$(sanitize "$REF_NAME")
+            echo "target_folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare distribution
+        env:
+          TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
+        run: |
+          set -euo pipefail
+
+          rm -rf dist
+          mkdir -p dist/site
+
+          DEST="dist/site"
+          if [ -n "${TARGET_FOLDER}" ]; then
+            DEST="dist/site/${TARGET_FOLDER}"
+            mkdir -p "$(dirname "$DEST")"
+          fi
+
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          cp -R src/trello-power-up/. "$DEST/"
+
+          if [ -n "${PROXY_URL:-}" ]; then
+            python3 - "$DEST" "$PROXY_URL" <<'PY'
+            import json
+            import pathlib
+            import sys
+
+            dest_dir = pathlib.Path(sys.argv[1])
+            proxy_url = sys.argv[2]
+
+            config_lines = [
+                "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
+                "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
+            ]
+
+            (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
+            PY
+          fi
+
+          touch dist/site/.nojekyll
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
   deploy:
+    needs: build
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      PROXY_URL: ${{ vars.PROXY_URL }}
-    concurrency:
-      group: trello-power-up-pages-${{ github.ref }}
-      cancel-in-progress: true
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Download built site
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
 
-    - name: Determine target folder
-      id: target
-      run: |
-        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          SAFE="pr-${PR_NUMBER}"
-          SAFE=$(printf '%s' "$SAFE" | tr -c '[:alnum:]._-' '-')
-          SAFE=$(printf '%s' "$SAFE" | sed 's/\-\{2,\}/-/g')
-          SAFE=${SAFE#-}
-          SAFE=${SAFE%-}
-          echo "folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
-        elif [ "$GITHUB_REF_NAME" = "main" ]; then
-          echo "folder=" >> "$GITHUB_OUTPUT"
-        else
-          SAFE=$(printf '%s' "$GITHUB_REF_NAME" | tr -c '[:alnum:]._-/' '-')
-          SAFE=$(printf '%s' "$SAFE" | sed 's/\-\{2,\}/-/g')
-          SAFE=${SAFE#-}
-          SAFE=${SAFE%-}
-          if [ -z "$SAFE" ]; then
-            SAFE="branch"
-          fi
-          echo "folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
-        fi
-      env:
-        GITHUB_EVENT_NAME: ${{ github.event_name }}
-        GITHUB_REF_NAME: ${{ github.ref_name }}
-        PR_NUMBER: ${{ github.event.number }}
+      - name: Deploy production (main → /)
+        if: needs.build.outputs.is_main == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          clean: true
 
-    - name: Checkout existing gh-pages branch
-      uses: actions/checkout@v3
-      with:
-        ref: gh-pages
-        path: gh-pages
-      continue-on-error: true
-
-    - name: Prepare distribution
-      run: |
-        rm -rf dist
-        mkdir -p dist
-        if [ -d gh-pages ]; then
-          cp -R gh-pages/. dist/
-        fi
-
-        TARGET="${{ steps.target.outputs.folder }}"
-        if [ -z "$TARGET" ]; then
-          mkdir -p dist/preview
-          find dist -mindepth 1 -maxdepth 1 ! -name 'preview' ! -name 'CNAME' ! -name '.nojekyll' -exec rm -rf {} +
-          cp -R src/trello-power-up/. dist/
-        else
-          mkdir -p "$(dirname "dist/$TARGET")"
-          rm -rf "dist/$TARGET"
-          mkdir -p "dist/$TARGET"
-          cp -R src/trello-power-up/. "dist/$TARGET/"
-        fi
-
-        if [ -z "$TARGET" ]; then
-          DEST_DIR="dist"
-        else
-          DEST_DIR="dist/$TARGET"
-        fi
-
-        if [ -n "$PROXY_URL" ]; then
-          python3 - "$DEST_DIR" "$PROXY_URL" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          dest_dir = pathlib.Path(sys.argv[1])
-          proxy_url = sys.argv[2]
-
-          config = "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n"
-          config += "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n"
-
-          dest_file = dest_dir / "trello-player-config.js"
-          dest_file.write_text(config, encoding="utf-8")
-          PY
-        fi
-        touch dist/.nojekyll
-
-    - name: Deploy to GitHub Pages
-      uses: JamesIves/github-pages-deploy-action@v4
-      with:
-        branch: gh-pages
-        folder: dist
-        clean: true
+      - name: Deploy preview (branch/PR → /preview/…)
+        if: needs.build.outputs.is_main != 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dist/site
+          target-folder: ${{ needs.build.outputs.target_folder }}
+          clean: false
