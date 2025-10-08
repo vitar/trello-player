@@ -1,49 +1,56 @@
-
-name: build-and-deploy
+name: Build & Deploy Power-Up
 
 on:
   push:
-    branches:
-      - main
-      - '**'
+    branches: ["**"]
   pull_request:
-
-concurrency:
-  group: trello-player-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: read
-  id-token: none
+  contents: read
+  pages: write        # needed by deploy job
+  id-token: write     # needed by deploy job
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      is_main: ${{ steps.metadata.outputs.is_main }}
-      is_pr: ${{ steps.metadata.outputs.is_pr }}
-      target_folder: ${{ steps.metadata.outputs.target_folder }}
     env:
       PROXY_URL: ${{ vars.PROXY_URL }}
+    outputs:
+      target_folder: ${{ steps.metadata.outputs.target_folder }}
+      is_main:       ${{ steps.metadata.outputs.is_main }}
+      is_pr:         ${{ steps.metadata.outputs.is_pr }}
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set deployment metadata
         id: metadata
+        shell: bash
         run: |
           set -euo pipefail
-
           REF_NAME='${{ github.ref_name }}'
           EVENT_NAME='${{ github.event_name }}'
           PR_NUMBER='${{ github.event.pull_request.number }}'
 
-          if [ "$REF_NAME" = "main" ]; then
-            echo "is_main=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_main=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Make a path-safe token for folder names.
+          sanitize() {
+            local value="$1"
+            # keep A-z0-9, dot, underscore, slash, and hyphen; replace others with '-'
+            value=$(printf '%s' "$value" | LC_ALL=C tr -c -- '[:alnum:]._/-' '-')
+            # collapse multiple dashes
+            value=$(printf '%s' "$value" | sed 's/-\{2,\}/-/g')
+            # trim leading/trailing dashes or slashes
+            value=${value##[-/]}
+            value=${value%%[-/]}
+            [ -z "$value" ] && value="branch"
+            printf '%s' "$value"
+          }
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             echo "is_pr=true" >> "$GITHUB_OUTPUT"
@@ -51,105 +58,76 @@ jobs:
             echo "is_pr=false" >> "$GITHUB_OUTPUT"
           fi
 
-          sanitize() {
-            local value="$1"
-            # CORRECTED: Added extra brackets around [:alnum:]
-            value=$(printf '%s' "$value" | LC_ALL=C tr -c -- '-[[:alnum:]]._/' '-')
-            value=$(printf '%s' "$value" | sed 's/-\{2,\}/-/g')
-            value=${value#-}
-            value=${value%-}
-            if [ -z "$value" ]; then
-              value="branch"
-            fi
-            printf '%s' "$value"
-          }
-
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            SAFE="pr-${PR_NUMBER}"
-            SAFE=$(sanitize "$SAFE")
-            echo "target_folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
-          elif [ "$REF_NAME" = "main" ]; then
+          if [ "$REF_NAME" = "main" ]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
             echo "target_folder=" >> "$GITHUB_OUTPUT"
           else
-            SAFE=$(sanitize "$REF_NAME")
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER}" ]; then
+              SAFE="pr-$(sanitize "$PR_NUMBER")"
+            else
+              SAFE="$(sanitize "$REF_NAME")"
+            fi
             echo "target_folder=preview/$SAFE" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Prepare distribution and config file
-        # This step is now merged to solve the variable scope issue
+      - name: Prepare distribution
         env:
           TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
+        shell: bash
         run: |
           set -euo pipefail
 
-          # Create base directories
           rm -rf dist
           mkdir -p dist/site
 
-          # Set the DEST variable, which will be available later in this same script
           DEST="dist/site"
           if [ -n "${TARGET_FOLDER}" ]; then
             DEST="dist/site/${TARGET_FOLDER}"
-            mkdir -p "$(dirname "$DEST")"
           fi
 
-          # Copy source files
-          rm -rf "$DEST"
           mkdir -p "$DEST"
           cp -R src/trello-power-up/. "$DEST/"
 
-          # Conditionally run Python to create the config file
-          # This now works because DEST is in the same shell environment
-          if [ -n "${PROXY_URL:-}" ]; then
-            echo "PROXY_URL is set. Generating trello-player-config.js..."
-            python3 - <<'PY'
-              import json, os, pathlib
-              dest_dir = pathlib.Path(os.environ["DEST"])
-              proxy_url = os.environ["PROXY_URL"]
-              config_lines = [
-                  "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
-                  "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
-              ]
-              (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
-              print(f"Successfully created config file in {dest_dir}")
-            PY
-          fi
+          # Make available to later steps, just in case
+          echo "DEST=$DEST" >> "$GITHUB_ENV"
 
+          # GitHub Pages needs this if you use files/folders that start with _
           touch dist/site/.nojekyll
 
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
+      - name: Write trello-player-config.js (only if PROXY_URL set)
+        if: ${{ env.PROXY_URL != '' }}
+        shell: python
+        env:
+          PROXY_URL: ${{ env.PROXY_URL }}
+          TARGET_FOLDER: ${{ steps.metadata.outputs.target_folder }}
+        run: |
+          import os, json, pathlib
+          base = pathlib.Path("dist/site")
+          tf = os.environ.get("TARGET_FOLDER", "")
+          dest = base / tf if tf else base
+          dest.mkdir(parents=True, exist_ok=True)
+          proxy = os.environ["PROXY_URL"]
+          js = (
+            "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n"
+            "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy) + ";\n"
+          )
+          (dest / "trello-player-config.js").write_text(js, encoding="utf-8")
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: dist
-          path: dist
-          if-no-files-found: error
+          path: dist/site
 
   deploy:
+    # Don’t deploy previews for PR events; you’ll still see the build artifact
+    if: ${{ github.event_name != 'pull_request' }}
     needs: build
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Download built site
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
-
-      - name: Deploy production (main → /)
-        if: needs.build.outputs.is_main == 'true'
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: dist/site
-          clean: true
-
-      - name: Deploy preview (branch/PR → /preview/…)
-        if: needs.build.outputs.is_main != 'true'
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: dist/site
-          target-folder: ${{ needs.build.outputs.target_folder }}
-          clean: false
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
