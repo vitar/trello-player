@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      PROXY_URL: ${{ vars.PROXY_URL }}
     concurrency:
       group: trello-power-up-pages-${{ github.ref }}
       cancel-in-progress: true
@@ -72,6 +74,29 @@ jobs:
           rm -rf "dist/$TARGET"
           mkdir -p "dist/$TARGET"
           cp -R src/trello-power-up/. "dist/$TARGET/"
+        fi
+
+        if [ -z "$TARGET" ]; then
+          DEST_DIR="dist"
+        else
+          DEST_DIR="dist/$TARGET"
+        fi
+
+        if [ -n "$PROXY_URL" ]; then
+          python3 - "$DEST_DIR" "$PROXY_URL" <<'PY'
+import json
+import pathlib
+import sys
+
+dest_dir = pathlib.Path(sys.argv[1])
+proxy_url = sys.argv[2]
+
+config = "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n"
+config += "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n"
+
+dest_file = dest_dir / "trello-player-config.js"
+dest_file.write_text(config, encoding="utf-8")
+PY
         fi
         touch dist/.nojekyll
 
