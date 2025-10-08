@@ -96,25 +96,8 @@ jobs:
           cp -R src/trello-power-up/. "$DEST/"
 
           if [ -n "${PROXY_URL:-}" ]; then
-            # Read DEST/PROXY_URL from environment inside Python.
-            # Use textwrap.dedent to allow for clean, indented Python code within the YAML file.
-            python3 -c '
-            import textwrap, sys, json, os, pathlib
-            code = sys.stdin.read()
-            dedented_code = textwrap.dedent(code)
-            exec(dedented_code)
-            ' <<'PY'
-              # This Python code is nicely indented and easy to read.
-              # textwrap.dedent() will remove the common leading whitespace.
-              dest_dir = pathlib.Path(os.environ["DEST"])
-              proxy_url = os.environ["PROXY_URL"]
-              config_lines = [
-                  "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
-                  "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
-              ]
-              (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
-              print("Config file 'trello-player-config.js' created successfully.")
-            PY
+            # Run the external Python script, passing env variables automatically.
+            python3 .github/workflows/prepare-config.py
           fi
 
           touch dist/site/.nojekyll
