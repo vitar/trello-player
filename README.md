@@ -38,8 +38,7 @@ The Power-Up has been briefly tested in desktop and mobile Chrome.
 _Trello mobile apps do not support custom Power-Ups._
 
 ## Proxy configuration
-- `trello-player-config.js` defines `window.trelloPlayerConfig.proxyUrl`. When the file is served without modification it falls
-  back to the shared proxy at `https://trello-proxy.vitar.workers.dev/`.
+- `trello-player-config.js` defines `window.trelloPlayerConfig.proxyUrl`.
 - During the GitHub Actions build the `Build and Publish Trello Power-Up` workflow reads the `PROXY_URL` environment variable
   (configured in the repository **Settings → Environments**) and rewrites `trello-player-config.js` in the deployment folder so
   GitHub Pages serves your private proxy URL.
@@ -54,13 +53,6 @@ The project is released under the [Unlicense](LICENSE).  Security issues can be 
 
 ## Development
 The project is being developed and maintained using OpenAI Codex with minimal manual intervention.
-
-There're two repositories used for development and production purposes, each repository is hosted on separate GitHub Pages:
-* https://github.com/vitar/trello-player-dev/ - for development (experimenting and testing).
-* https://github.com/vitar/trello-player/ - for production.
-
-When new features are developed, development repo code will be manually copied to production repo.
-For fork purposes, use https://github.com/vitar/trello-player/ repository.
 
 ## Test automation
 The `test` folder contains a small Node.js script that loads
