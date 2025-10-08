@@ -100,8 +100,9 @@ audio {
   margin-right: 10px;
 }
 .attachments {
-  list-style-type: none;
+  list-style-type: decimal;
   padding-left: 0;
+  margin: 0;
 }
 .attachments li {
   margin-bottom: 5px;
