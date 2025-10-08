@@ -95,12 +95,23 @@ jobs:
           mkdir -p "$DEST"
           cp -R src/trello-power-up/. "$DEST/"
 
-          if [ -n "${PROXY_URL:-}" ]; then
-            # Run the external Python script, passing env variables automatically.
-            python3 .github/workflows/prepare-config.py
-          fi
-
           touch dist/site/.nojekyll
+  
+      - name: Write trello-player-config.js
+        if: env.PROXY_URL != ''
+        shell: python
+        env:
+            DEST: ${{ env.DEST }}
+            PROXY_URL: ${{ env.PROXY_URL }}
+        run: |
+            import json, os, pathlib
+            dest_dir = pathlib.Path(os.environ["DEST"])
+            proxy_url = os.environ["PROXY_URL"]  # <-- underscore, no space
+            config_lines = [
+                "window.trelloPlayerConfig = window.trelloPlayerConfig || {};\n",
+                "window.trelloPlayerConfig.proxyUrl = " + json.dumps(proxy_url) + ";\n",
+            ]
+            (dest_dir / "trello-player-config.js").write_text("".join(config_lines), encoding="utf-8")
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
