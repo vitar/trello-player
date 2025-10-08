@@ -95,7 +95,7 @@ jobs:
           # GitHub Pages needs this if you use files/folders that start with _
           touch dist/site/.nojekyll
 
-      - name: Write trello-player-config.js (only if PROXY_URL set)
+      - name: Write trello-player-config.js
         if: ${{ env.PROXY_URL != '' }}
         shell: python
         env:
