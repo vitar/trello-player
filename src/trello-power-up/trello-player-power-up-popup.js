@@ -18,7 +18,7 @@ let trelloToken;
 let apiKey;
 let popup;
 let authMessageHandler;
-const PROXY_URL = 'https://trello-proxy.vitar.workers.dev/';
+const PROXY_URL = window.trelloPlayerConfig?.proxyUrl || 'https://trello-proxy.vitar.workers.dev/';
 let currentObjectUrl = null;
 let currentLoadRequest = 0;
 const PITCH_MIN = -4;

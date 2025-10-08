@@ -6,6 +6,11 @@ Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments o
 
 The files in this repository are static and can be hosted on any static hosting provider.  GitHub Pages works well &mdash; fork https://github.com/vitar/trello-player/ repository and enable Pages to serve the files.
 
+## Repository structure
+- `src/trello-power-up/` &mdash; HTML, CSS and JavaScript that power the Trello popup experience, including the `trello-player-config.js` bootstrap that exposes runtime configuration to the player.
+- `src/cloudflare-worker-cors-proxy/` &mdash; Cloudflare Worker source used to provide CORS access to Trello attachments.
+- `test/` &mdash; jsdom-based smoke tests that ensure the popup loads attachments when the Trello API is mocked.
+
 ## Enabling the Power-Up in Trello
 1. Open the [Trello Power-Up admin page](https://trello.com/power-ups/admin) and choose **New**.
 2. Fill in the form:
@@ -31,6 +36,15 @@ The files in this repository are static and can be hosted on any static hosting 
 
 The Power-Up has been briefly tested in desktop and mobile Chrome.
 _Trello mobile apps do not support custom Power-Ups._
+
+## Proxy configuration
+- `trello-player-config.js` defines `window.trelloPlayerConfig.proxyUrl`. When the file is served without modification it falls
+  back to the shared proxy at `https://trello-proxy.vitar.workers.dev/`.
+- During the GitHub Actions build the `Build and Publish Trello Power-Up` workflow reads the `PROXY_URL` environment variable
+  (configured in the repository **Settings → Environments**) and rewrites `trello-player-config.js` in the deployment folder so
+  GitHub Pages serves your private proxy URL.
+- For local development you can temporarily override the proxy by editing `src/trello-power-up/trello-player-config.js` or by
+  defining `window.trelloPlayerConfig.proxyUrl` in the browser console before loading attachments.
 
 ## Known issues
 - This Power-Up does not conform to Trello requirements and is not publicly listed, but it can be self-hosted and enabled in your workspace.
