@@ -67,6 +67,8 @@ class WaveformPreview extends HTMLElement {
     this.msg = this.querySelector('.no-waveform-msg');
     this.wrench = this.querySelector('.wrench');
     this.placeholder = this.querySelector('.waveform-placeholder');
+    this.status = this.querySelector('.waveform-status');
+    this.loadingTimer = null;
   }
   createPlayer(options = {}) {
     if (this.wavesurfer) {
@@ -94,6 +96,7 @@ class WaveformPreview extends HTMLElement {
       duration: duration
     });
     this.hideLoading();
+    this.hideStatus();
   }
   loadFromUrl(url, options = {}) {
     this.showLoading();
@@ -120,6 +123,7 @@ class WaveformPreview extends HTMLElement {
     this.hideMessage();
     this.hideWrench();
     this.hideLoading();
+    this.hideStatus();
   }
   showDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.remove('hidden'); }
   hideDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.add('hidden'); }
@@ -129,11 +133,42 @@ class WaveformPreview extends HTMLElement {
   hideWrench() { if (this.wrench) this.wrench.classList.add('hidden'); }
   showLoading() {
     this.classList.add('loading');
-    if (this.placeholder) this.placeholder.classList.remove('hidden');
+    this.hideStatus();
+    if (this.loadingTimer) {
+      clearTimeout(this.loadingTimer);
+      this.loadingTimer = null;
+    }
+    if (this.placeholder) {
+      this.placeholder.classList.add('hidden');
+      const timer = setTimeout(() => {
+        if (this.classList.contains('loading') && this.placeholder) {
+          this.placeholder.classList.remove('hidden');
+        }
+        if (this.loadingTimer === timer) {
+          this.loadingTimer = null;
+        }
+      }, 3000);
+      this.loadingTimer = timer;
+    }
   }
   hideLoading() {
     this.classList.remove('loading');
+    if (this.loadingTimer) {
+      clearTimeout(this.loadingTimer);
+      this.loadingTimer = null;
+    }
     if (this.placeholder) this.placeholder.classList.add('hidden');
+  }
+  showStatus(message) {
+    if (!this.status) return;
+    this.hideLoading();
+    this.status.textContent = message;
+    this.status.classList.remove('hidden');
+  }
+  hideStatus() {
+    if (!this.status) return;
+    this.status.textContent = '';
+    this.status.classList.add('hidden');
   }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
@@ -391,6 +426,7 @@ async function loadAttachment(index) {
   });
 
   setPitchControlsEnabled(false);
+  waveformView.hideStatus();
   waveformView.showLoading();
   let audioBlob;
   let audioUrl;
@@ -412,7 +448,10 @@ async function loadAttachment(index) {
     prefetchAdjacent(index);
     const playPromise = audioPlayer.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {});
+      playPromise.catch((error) => {
+        console.warn('Playback start was blocked:', error);
+        waveformView.showStatus('Press play or choose a track to start playback.');
+      });
     }
   } catch (error) {
     if (audioUrl && audioUrl !== currentObjectUrl) {
@@ -459,6 +498,7 @@ document.getElementById('stop-button').addEventListener('click', () => {
 
 function showWaveform(audioUrl) {
   waveformView.clear();
+  waveformView.hideStatus();
   waveformView.showLoading();
   waveformView.showWrench();
   waveformView.setWrenchHandler(openWaveformModal);
@@ -510,6 +550,10 @@ audioPlayer.addEventListener('play', async () => {
   } catch (error) {
     console.warn('Unable to prepare pitch processor on play:', error);
   }
+});
+
+audioPlayer.addEventListener('playing', () => {
+  waveformView.hideStatus();
 });
 
 if (pitchSlider) {
