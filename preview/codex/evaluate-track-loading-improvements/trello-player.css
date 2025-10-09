@@ -14,6 +14,8 @@ body {
     --surface-border-color: rgba(255, 255, 255, 0.2);
     --spinner-track: rgba(255, 255, 255, 0.2);
     --spinner-accent: var(--link-color);
+    --waveform-overlay-bg: rgba(0, 0, 0, 0.5);
+    --waveform-overlay-text: var(--text-color);
   }
   body {
     background-color: var(--bg-color);
@@ -36,6 +38,8 @@ body {
     --surface-border-color: rgba(0, 0, 0, 0.15);
     --spinner-track: rgba(0, 0, 0, 0.1);
     --spinner-accent: var(--link-color);
+    --waveform-overlay-bg: rgba(255, 255, 255, 0.85);
+    --waveform-overlay-text: var(--text-color);
   }
   body {
     background-color: var(--bg-color);
@@ -247,6 +251,22 @@ waveform-preview.loading .waveform-canvas {
     transparent 55%,
     transparent 100%
   );
+}
+.waveform-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--waveform-overlay-text);
+  background-color: var(--waveform-overlay-bg);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  z-index: 6;
 }
 .spinner {
   width: 32px;
