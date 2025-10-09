@@ -21,6 +21,8 @@ let authMessageHandler;
 const PROXY_URL = window.trelloPlayerConfig?.proxyUrl;
 let currentObjectUrl = null;
 let currentLoadRequest = 0;
+const audioBlobCache = new Map();
+const AUDIO_CACHE_LIMIT = 6;
 const PITCH_MIN = -4;
 const PITCH_MAX = 4;
 const PITCH_KEY_PREFIX = 'pitch:';
@@ -64,6 +66,9 @@ class WaveformPreview extends HTMLElement {
     this.deleteBtn = this.querySelector('.delete-waveform');
     this.msg = this.querySelector('.no-waveform-msg');
     this.wrench = this.querySelector('.wrench');
+    this.placeholder = this.querySelector('.waveform-placeholder');
+    this.status = this.querySelector('.waveform-status');
+    this.loadingTimer = null;
   }
   createPlayer(options = {}) {
     if (this.wavesurfer) {
@@ -90,12 +95,23 @@ class WaveformPreview extends HTMLElement {
       peaks: peaks,
       duration: duration
     });
+    this.hideLoading();
+    this.hideStatus();
   }
   loadFromUrl(url, options = {}) {
+    this.showLoading();
     this.createPlayer({
       ...options,
       url: url
     });
+    if (this.wavesurfer) {
+      this.wavesurfer.once('ready', () => {
+        this.hideLoading();
+      });
+      this.wavesurfer.once('error', () => {
+        this.hideLoading();
+      });
+    }
   }
   clear() {
     if (this.wavesurfer) {
@@ -106,6 +122,8 @@ class WaveformPreview extends HTMLElement {
     this.hideDeleteButton();
     this.hideMessage();
     this.hideWrench();
+    this.hideLoading();
+    this.hideStatus();
   }
   showDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.remove('hidden'); }
   hideDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.add('hidden'); }
@@ -113,6 +131,45 @@ class WaveformPreview extends HTMLElement {
   hideMessage() { if (this.msg) this.msg.classList.add('hidden'); }
   showWrench() { if (this.wrench) this.wrench.classList.remove('hidden'); }
   hideWrench() { if (this.wrench) this.wrench.classList.add('hidden'); }
+  showLoading() {
+    this.classList.add('loading');
+    this.hideStatus();
+    if (this.loadingTimer) {
+      clearTimeout(this.loadingTimer);
+      this.loadingTimer = null;
+    }
+    if (this.placeholder) {
+      this.placeholder.classList.add('hidden');
+      const timer = setTimeout(() => {
+        if (this.classList.contains('loading') && this.placeholder) {
+          this.placeholder.classList.remove('hidden');
+        }
+        if (this.loadingTimer === timer) {
+          this.loadingTimer = null;
+        }
+      }, 3000);
+      this.loadingTimer = timer;
+    }
+  }
+  hideLoading() {
+    this.classList.remove('loading');
+    if (this.loadingTimer) {
+      clearTimeout(this.loadingTimer);
+      this.loadingTimer = null;
+    }
+    if (this.placeholder) this.placeholder.classList.add('hidden');
+  }
+  showStatus(message) {
+    if (!this.status) return;
+    this.hideLoading();
+    this.status.textContent = message;
+    this.status.classList.remove('hidden');
+  }
+  hideStatus() {
+    if (!this.status) return;
+    this.status.textContent = '';
+    this.status.classList.add('hidden');
+  }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
   }
@@ -132,7 +189,7 @@ function revokeCurrentObjectUrl() {
   }
 }
 
-async function fetchAttachmentAudio(originalUrl) {
+async function fetchAttachmentBlob(originalUrl) {
   if (!trelloToken) {
     throw new Error('Missing Trello token');
   }
@@ -146,8 +203,7 @@ async function fetchAttachmentAudio(originalUrl) {
   if (!response.ok) {
     throw new Error(`Proxy request failed with status ${response.status}`);
   }
-  const blob = await response.blob();
-  return URL.createObjectURL(blob);
+  return await response.blob();
 }
 
 function clampPitch(value) {
@@ -157,6 +213,62 @@ function clampPitch(value) {
 
 function getPitchStorageKey(attachment) {
   return `${PITCH_KEY_PREFIX}${attachment.cardId}:${attachment.id}`;
+}
+
+function trimAudioCache(preserveIds = []) {
+  if (audioBlobCache.size <= AUDIO_CACHE_LIMIT) {
+    return;
+  }
+  const preserveSet = new Set(preserveIds.filter(Boolean));
+  for (const [attachmentId] of audioBlobCache) {
+    if (audioBlobCache.size <= AUDIO_CACHE_LIMIT) {
+      break;
+    }
+    if (preserveSet.has(attachmentId)) {
+      preserveSet.delete(attachmentId);
+      continue;
+    }
+    audioBlobCache.delete(attachmentId);
+  }
+}
+
+function fetchAndCacheAttachment(attachment) {
+  if (!attachment) {
+    return null;
+  }
+
+  if (!audioBlobCache.has(attachment.id)) {
+    const downloadPromise = fetchAttachmentBlob(attachment.url);
+    audioBlobCache.set(attachment.id, downloadPromise);
+    trimAudioCache([attachment.id, m4aAttachments[currentAttachmentIndex]?.id]);
+    downloadPromise.catch(() => {
+      if (audioBlobCache.get(attachment.id) === downloadPromise) {
+        audioBlobCache.delete(attachment.id);
+      }
+    });
+  }
+
+  return audioBlobCache.get(attachment.id);
+}
+
+async function getAttachmentBlob(attachment) {
+  const blobPromise = fetchAndCacheAttachment(attachment);
+  if (!blobPromise) {
+    throw new Error('Unable to resolve attachment blob');
+  }
+  return await blobPromise;
+}
+
+function prefetchAttachment(index) {
+  if (index < 0 || index >= m4aAttachments.length) {
+    return;
+  }
+  fetchAndCacheAttachment(m4aAttachments[index]);
+}
+
+function prefetchAdjacent(index) {
+  prefetchAttachment(index + 1);
+  prefetchAttachment(index - 1);
 }
 
 function updatePitchUI(value) {
@@ -260,6 +372,7 @@ async function applyPitchValue(value, { persist = false } = {}) {
 
 async function loadPlayer(token, key) {
   try {
+    audioBlobCache.clear();
     m4aAttachments = [];
     attachmentsList.innerHTML = '';
     setPitchControlsEnabled(false);
@@ -313,13 +426,16 @@ async function loadAttachment(index) {
   });
 
   setPitchControlsEnabled(false);
+  waveformView.hideStatus();
+  waveformView.showLoading();
+  let audioBlob;
   let audioUrl;
   try {
-    audioUrl = await fetchAttachmentAudio(attachment.url);
+    audioBlob = await getAttachmentBlob(attachment);
     if (loadToken !== currentLoadRequest) {
-      URL.revokeObjectURL(audioUrl);
       return;
     }
+    audioUrl = URL.createObjectURL(audioBlob);
     revokeCurrentObjectUrl();
     currentObjectUrl = audioUrl;
     audioPlayer.src = audioUrl;
@@ -329,9 +445,13 @@ async function loadAttachment(index) {
     await applyPitchValue(pitchValue);
     setPitchControlsEnabled(true);
     showWaveform(audioUrl);
+    prefetchAdjacent(index);
     const playPromise = audioPlayer.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {});
+      playPromise.catch((error) => {
+        console.warn('Playback start was blocked:', error);
+        waveformView.showStatus('Press play or choose a track to start playback.');
+      });
     }
   } catch (error) {
     if (audioUrl && audioUrl !== currentObjectUrl) {
@@ -345,6 +465,9 @@ async function loadAttachment(index) {
     });
     setPitchControlsEnabled(m4aAttachments.length > 0);
     updatePitchUI(desiredPitchSemitones);
+    if (loadToken === currentLoadRequest) {
+      waveformView.hideLoading();
+    }
   }
 }
 
@@ -375,6 +498,8 @@ document.getElementById('stop-button').addEventListener('click', () => {
 
 function showWaveform(audioUrl) {
   waveformView.clear();
+  waveformView.hideStatus();
+  waveformView.showLoading();
   waveformView.showWrench();
   waveformView.setWrenchHandler(openWaveformModal);
   try {
@@ -425,6 +550,10 @@ audioPlayer.addEventListener('play', async () => {
   } catch (error) {
     console.warn('Unable to prepare pitch processor on play:', error);
   }
+});
+
+audioPlayer.addEventListener('playing', () => {
+  waveformView.hideStatus();
 });
 
 if (pitchSlider) {

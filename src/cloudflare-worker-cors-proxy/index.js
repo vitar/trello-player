@@ -83,6 +83,7 @@ export default {
       response = new Response(response.body, response);
       response.headers.set("Access-Control-Allow-Origin", origin);
       response.headers.set("Vary", "Origin");
+      response.headers.set("Cache-Control", "private, max-age=86400");
 
       return response;
     } catch (err) {
