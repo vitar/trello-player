@@ -424,11 +424,15 @@ async function loadPlayer(token, key) {
         const li = attachmentTemplate.content.firstElementChild.cloneNode(true);
         li.dataset.attachmentId = attachment.id;
         li.dataset.originalName = attachment.name;
-        updateAttachmentDurationDisplay(attachment.id);
+        const nameElement = li.querySelector('.attachment-name');
+        if (nameElement) {
+          nameElement.textContent = attachment.name;
+        }
         li.addEventListener('click', () => {
           loadAttachment(m4aAttachments.findIndex((att) => att.id === attachment.id));
         });
         attachmentsList.appendChild(li);
+        updateAttachmentDurationDisplay(attachment.id);
       });
     });
 
