@@ -252,6 +252,9 @@ waveform-preview.loading .waveform-canvas {
     transparent 100%
   );
 }
+.waveform-placeholder.hidden {
+  display: none;
+}
 .waveform-status {
   position: absolute;
   inset: 0;
@@ -267,6 +270,9 @@ waveform-preview.loading .waveform-canvas {
   backdrop-filter: blur(2px);
   pointer-events: none;
   z-index: 6;
+}
+.waveform-status.hidden {
+  display: none;
 }
 .spinner {
   width: 32px;
