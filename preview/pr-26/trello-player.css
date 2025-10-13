@@ -142,7 +142,7 @@ audio {
 }
 .waveform-canvas {
   width: 100%;
-  min-height: 110px;
+  min-height: 80px;
   position: relative;
 }
 .no-waveform-msg {
@@ -217,7 +217,7 @@ audio {
 waveform-preview {
   display: block;
   position: relative;
-  min-height: 120px;
+  min-height: 80px;
   padding: 0.5rem;
   box-sizing: border-box;
   border-radius: 8px;
