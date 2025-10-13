@@ -1,9 +1,11 @@
+let audioPlayer = document.getElementById('audio-player');
 window.TrelloPowerUp.initialize({
   'list-actions': function(t, options){
     return [{
       icon: './trello-player-192.png',
       text: 'Audio Player',
       callback: async function (t) {
+        this.audioPlayer.play();
         return t.modal({
           title: "Audio Player",
           url: "./trello-player-power-up-popup.html",
@@ -19,4 +21,3 @@ window.TrelloPowerUp.initialize({
     }];
   },
 });
-let audioPlayer = document.getElementById('audio-player');
