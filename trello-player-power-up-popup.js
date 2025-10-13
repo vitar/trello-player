@@ -440,11 +440,11 @@ async function loadAttachment(index) {
     currentObjectUrl = audioUrl;
     audioPlayer.src = audioUrl;
     audioPlayer.load();
+    showWaveform(audioUrl);
     const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
     const pitchValue = clampPitch(Number(storedPitch));
     await applyPitchValue(pitchValue);
     setPitchControlsEnabled(true);
-    showWaveform(audioUrl);
     prefetchAdjacent(index);
     const playPromise = audioPlayer.play();
     if (playPromise !== undefined) {
