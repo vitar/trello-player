@@ -4,9 +4,6 @@ window.TrelloPowerUp.initialize({
       icon: './trello-player-192.png',
       text: 'Audio Player',
       callback: async function (t) {
-        if (window.top.audioPlayer) {
-          window.top.audioPlayer.resume();
-        }
         return t.modal({
           title: "Audio Player",
           url: "./trello-player-power-up-popup.html",
@@ -23,4 +20,3 @@ window.TrelloPowerUp.initialize({
   },
 });
 let audioPlayer = document.getElementById('audio-player');
-window.top.audioPlayer = audioPlayer;
