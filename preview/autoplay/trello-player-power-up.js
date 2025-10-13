@@ -5,7 +5,7 @@ window.TrelloPowerUp.initialize({
       icon: './trello-player-192.png',
       text: 'Audio Player',
       callback: async function (t) {
-        this.audioPlayer.play();
+        audioPlayer.play();
         return t.modal({
           title: "Audio Player",
           url: "./trello-player-power-up-popup.html",
