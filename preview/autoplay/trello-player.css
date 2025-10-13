@@ -1,0 +1,330 @@
+body {
+  font-family: Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: black;
+    --text-color: lightgrey;
+    --link-color: GreenYellow;
+    --btn-color: lightgrey;
+    --btn-bg: black;
+    --btn-hover-bg: lightgrey;
+    --btn-hover-text: black;
+    --surface-color: rgba(255, 255, 255, 0.05);
+    --surface-border-color: rgba(255, 255, 255, 0.2);
+    --spinner-track: rgba(255, 255, 255, 0.2);
+    --spinner-accent: var(--link-color);
+    --waveform-overlay-bg: rgba(0, 0, 0, 0.5);
+    --waveform-overlay-text: var(--text-color);
+  }
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+  }
+  a {
+    color: var(--link-color);
+  }
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-color: lightgrey;
+    --text-color: black;
+    --link-color: DarkOliveGreen;
+    --btn-color: black;
+    --btn-bg: lightgrey;
+    --btn-hover-bg: black;
+    --btn-hover-text: lightgrey;
+    --surface-color: rgba(0, 0, 0, 0.05);
+    --surface-border-color: rgba(0, 0, 0, 0.15);
+    --spinner-track: rgba(0, 0, 0, 0.1);
+    --spinner-accent: var(--link-color);
+    --waveform-overlay-bg: rgba(255, 255, 255, 0.85);
+    --waveform-overlay-text: var(--text-color);
+  }
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+  }
+  a {
+    color: var(--link-color);
+  }
+}
+.list {
+  margin-bottom: 10px;
+}
+.card {
+  margin-left: 20px;
+  margin-bottom: 20px;
+}
+.hidden {
+  display: none;
+}
+a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+.back-link {
+  display: block;
+  margin-top: 20px;
+}
+audio {
+  display: block;
+  margin-top: 10px;
+}
+.player-controls {
+  display: flex;
+  gap: 0.5em;
+  justify-content: center;
+  align-items: center;
+  padding: 1em;
+}
+.circle-btn {
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif;
+  font-size: 1.5em;
+  color: var(--btn-color);
+  background-color: var(--btn-bg);
+  border: 2px solid var(--btn-color);
+  border-radius: 50%;
+  width: 2em;
+  height: 2em;
+  text-align: center;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s, transform 0.1s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .circle-btn:hover {
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-text);
+  }
+}
+.circle-btn:active {
+  transform: scale(0.95);
+  filter: brightness(0.8);
+}
+.controls {
+  margin-top: 10px;
+}
+.controls button {
+  margin-right: 10px;
+}
+.attachments {
+  list-style-type: decimal;
+  padding-left: 2rem;
+  margin: 0;
+}
+.attachments li {
+  margin-bottom: 5px;
+  cursor: pointer;
+}
+.active {
+  font-weight: bold;
+}
+#audio-player {
+  width: 100%;
+}
+#attachments-container {
+  --margin: 20px;
+  margin: var(--margin);
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  height: calc(100dvh - var(--margin) * 2);
+}
+#attachments-list {
+  overflow-y: auto;
+}
+#waveform-view {
+  margin-top: 10px;
+  position: relative;
+}
+.waveform-canvas {
+  width: 100%;
+  min-height: 80px;
+  position: relative;
+}
+.no-waveform-msg {
+  margin-right: 5px;
+}
+#waveform-view .no-waveform-msg.floating {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  z-index: 10;
+}
+.wrench {
+  margin-left: 5px;
+  cursor: pointer;
+}
+#waveform-view .wrench.floating {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  z-index: 10;
+}
+#waveform-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: grid;
+  place-content: center;
+  z-index: 1000;
+}
+#waveform-modal.hidden {
+  display: none;
+}
+#waveform-modal .modal-content {
+  background: var(--bg-color);
+  color: var(--text-color);
+  padding: 20px;
+  max-width: 500px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+#waveform-modal .modal-section + .modal-actions {
+  margin-top: 20px;
+}
+#waveform-modal .modal-section h2 {
+  margin-top: 0;
+}
+.pitch-controls {
+  display: grid;
+  gap: 0.75em;
+}
+.pitch-slider-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75em;
+}
+.pitch-slider-row input[type="range"] {
+  width: 100%;
+}
+.pitch-limit {
+  font-variant-numeric: tabular-nums;
+}
+.pitch-current {
+  font-weight: bold;
+}
+#waveform-modal .modal-actions {
+  margin-top: 10px;
+  text-align: right;
+}
+waveform-preview {
+  display: block;
+  position: relative;
+  min-height: 80px;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background-color: var(--surface-color);
+  border: 1px solid var(--surface-border-color);
+  transition: background-color 0.2s ease;
+}
+waveform-preview .delete-waveform {
+  position: absolute;
+  top: 0;
+  right: 0;
+  cursor: pointer;
+  z-index: 10;
+}
+waveform-preview.loading .waveform-canvas {
+  opacity: 0.4;
+}
+.waveform-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    transparent 45%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 55%,
+    transparent 100%
+  );
+}
+.waveform-placeholder.hidden {
+  display: none;
+}
+.waveform-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--waveform-overlay-text);
+  background-color: var(--waveform-overlay-bg);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  z-index: 6;
+}
+.waveform-status.hidden {
+  display: none;
+}
+.spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 4px solid var(--spinner-track);
+  border-top-color: var(--spinner-accent);
+  animation: spin 1s linear infinite;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#authorize-button {
+  margin: 20px auto;
+  padding: 0.5em 1em;
+  font-size: 1em;
+  color: var(--btn-color);
+  background-color: var(--btn-bg);
+  border: 2px solid var(--btn-color);
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+  display: block;
+}
+@media (hover: hover) and (pointer: fine) {
+  #authorize-button:hover {
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-text);
+  }
+}
+
+#auth-form {
+  margin: 20px;
+  text-align: center;
+}
+#auth-form input {
+  padding: 0.5em;
+  margin-right: 0.5em;
+}
