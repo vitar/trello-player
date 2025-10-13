@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <title>Audio Player for Trello Power-Up Popup</title>
-    <link rel="stylesheet" href="./trello-player.css?18">
+    <link rel="stylesheet" href="./trello-player.css?22">
   </head>
   <body>
     <div id="auth-form" class="hidden">
@@ -27,6 +27,11 @@
       <span class="no-waveform-msg floating hidden">Waveform tools 🔧</span>
       <span class="wrench floating hidden">🔧</span>
       <span class="delete-waveform hidden">🅇</span>
+      <div class="waveform-placeholder hidden" role="status" aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <span class="sr-only">Loading waveform…</span>
+      </div>
+      <div class="waveform-status hidden" role="status" aria-live="polite"></div>
       <div class="waveform-canvas"></div>
     </template>
 
@@ -58,6 +63,6 @@
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="./trello-player-config.js?1"></script>
-    <script src="./trello-player-power-up-popup.js?41"></script>
+    <script src="./trello-player-power-up-popup.js?44"></script>
   </body>
 </html>
