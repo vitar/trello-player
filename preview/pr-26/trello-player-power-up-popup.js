@@ -426,6 +426,8 @@ async function loadAttachment(index) {
   });
 
   setPitchControlsEnabled(false);
+  waveformView.hideStatus();
+  waveformView.showLoading();
   let audioBlob;
   let audioUrl;
   try {
@@ -496,6 +498,8 @@ document.getElementById('stop-button').addEventListener('click', () => {
 
 function showWaveform(audioUrl) {
   waveformView.clear();
+  waveformView.hideStatus();
+  waveformView.showLoading();
   waveformView.showWrench();
   waveformView.setWrenchHandler(openWaveformModal);
   try {
