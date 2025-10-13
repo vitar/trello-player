@@ -23,6 +23,7 @@ let currentObjectUrl = null;
 let currentLoadRequest = 0;
 const audioBlobCache = new Map();
 const AUDIO_CACHE_LIMIT = 6;
+const attachmentDurations = new Map();
 const PITCH_MIN = -4;
 const PITCH_MAX = 4;
 const PITCH_KEY_PREFIX = 'pitch:';
@@ -271,6 +272,41 @@ function prefetchAdjacent(index) {
   prefetchAttachment(index - 1);
 }
 
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null;
+  }
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  const paddedSeconds = String(remainingSeconds).padStart(2, '0');
+  return `${paddedMinutes}:${paddedSeconds}`;
+}
+
+function updateAttachmentDurationDisplay(attachmentId) {
+  if (!attachmentId) {
+    return;
+  }
+  const listItem = attachmentsList.querySelector(`li[data-attachment-id="${attachmentId}"]`);
+  if (!listItem) {
+    return;
+  }
+  const nameElement = listItem.querySelector('.attachment-name');
+  if (!nameElement) {
+    return;
+  }
+  const originalName = listItem.dataset.originalName || nameElement.textContent;
+  listItem.dataset.originalName = originalName;
+  const storedDuration = attachmentDurations.get(attachmentId);
+  const formattedDuration = formatDuration(storedDuration);
+  if (formattedDuration) {
+    nameElement.textContent = `(${formattedDuration}) ${originalName}`;
+  } else {
+    nameElement.textContent = originalName;
+  }
+}
+
 function updatePitchUI(value) {
   if (pitchSlider) pitchSlider.value = value;
   if (pitchDisplay) {
@@ -375,6 +411,7 @@ async function loadPlayer(token, key) {
     audioBlobCache.clear();
     m4aAttachments = [];
     attachmentsList.innerHTML = '';
+    attachmentDurations.clear();
     setPitchControlsEnabled(false);
     const listInfo = await t.list('id');
     const response = await fetch(`https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${key}&token=${token}`);
@@ -385,11 +422,17 @@ async function loadPlayer(token, key) {
         m4aAttachments.push(Object.assign({cardId: card.id}, attachment));
 
         const li = attachmentTemplate.content.firstElementChild.cloneNode(true);
-        li.querySelector('.attachment-name').textContent = attachment.name;
+        li.dataset.attachmentId = attachment.id;
+        li.dataset.originalName = attachment.name;
+        const nameElement = li.querySelector('.attachment-name');
+        if (nameElement) {
+          nameElement.textContent = attachment.name;
+        }
         li.addEventListener('click', () => {
           loadAttachment(m4aAttachments.findIndex((att) => att.id === attachment.id));
         });
         attachmentsList.appendChild(li);
+        updateAttachmentDurationDisplay(attachment.id);
       });
     });
 
@@ -440,6 +483,8 @@ async function loadAttachment(index) {
     currentObjectUrl = audioUrl;
     audioPlayer.src = audioUrl;
     audioPlayer.load();
+    audioPlayer.dataset.attachmentId = attachment.id;
+    audioPlayer.dataset.loadToken = String(loadToken);
     showWaveform(audioUrl);
     const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
     const pitchValue = clampPitch(Number(storedPitch));
@@ -540,6 +585,20 @@ audioPlayer.addEventListener('ended', () => {
   if (currentAttachmentIndex < m4aAttachments.length - 1) {
     loadAttachment(currentAttachmentIndex + 1);
   }
+});
+
+audioPlayer.addEventListener('loadedmetadata', () => {
+  const attachmentId = audioPlayer.dataset.attachmentId;
+  const loadToken = Number(audioPlayer.dataset.loadToken);
+  if (!attachmentId || loadToken !== currentLoadRequest) {
+    return;
+  }
+  const duration = audioPlayer.duration;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return;
+  }
+  attachmentDurations.set(attachmentId, duration);
+  updateAttachmentDurationDisplay(attachmentId);
 });
 
 audioPlayer.addEventListener('play', async () => {
