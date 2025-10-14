@@ -70,8 +70,6 @@ class WaveformPreview extends HTMLElement {
     const frag = waveformTemplate.content.cloneNode(true);
     this.appendChild(frag);
     this.canvas = this.querySelector('.waveform-canvas');
-    this.deleteBtn = this.querySelector('.delete-waveform');
-    this.msg = this.querySelector('.no-waveform-msg');
     this.wrench = this.querySelector('.wrench');
     this.placeholder = this.querySelector('.waveform-placeholder');
     this.status = this.querySelector('.waveform-status');
@@ -126,18 +124,9 @@ class WaveformPreview extends HTMLElement {
       this.wavesurfer = null;
     }
     this.canvas.innerHTML = '';
-    this.hideDeleteButton();
-    this.hideMessage();
-    this.hideWrench();
     this.hideLoading();
     this.hideStatus();
   }
-  showDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.remove('hidden'); }
-  hideDeleteButton() { if (this.deleteBtn) this.deleteBtn.classList.add('hidden'); }
-  showMessage() { if (this.msg) this.msg.classList.remove('hidden'); }
-  hideMessage() { if (this.msg) this.msg.classList.add('hidden'); }
-  showWrench() { if (this.wrench) this.wrench.classList.remove('hidden'); }
-  hideWrench() { if (this.wrench) this.wrench.classList.add('hidden'); }
   showLoading() {
     this.classList.add('loading');
     this.hideStatus();
@@ -630,7 +619,6 @@ function showWaveform(audioUrl) {
   waveformView.clear();
   waveformView.hideStatus();
   waveformView.showLoading();
-  waveformView.showWrench();
   waveformView.setWrenchHandler(openWaveformModal);
   try {
     waveformView.loadFromUrl(audioUrl, {

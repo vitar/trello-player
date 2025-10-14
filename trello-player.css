@@ -145,19 +145,29 @@ audio {
   min-height: 80px;
   position: relative;
 }
-.no-waveform-msg {
-  margin-right: 5px;
-}
-#waveform-view .no-waveform-msg.floating {
-  position: absolute;
-  top: 0;
-  left: 0;
-  margin: 0;
-  z-index: 10;
-}
 .wrench {
-  margin-left: 5px;
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif;
+  font-size: 2em;
+  color: var(--btn-color);
+  background-color: color-mix(in srgb, var(--btn-bg) 50%, transparent);
+  border: 0px;
+  border-radius: 50%;
+  width: 1.2em;
+  height: 1.2em;
+  text-align: center;
+  line-height: 1;
   cursor: pointer;
+  transition: background-color 0.3s, color 0.3s, transform 0.1s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .wrench:hover {
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-text);
+  }
+}
+.wrench:active {
+  transform: scale(0.95);
+  filter: brightness(0.8);
 }
 #waveform-view .wrench.floating {
   position: absolute;
@@ -231,13 +241,6 @@ waveform-preview {
   background-color: var(--surface-color);
   border: 1px solid var(--surface-border-color);
   transition: background-color 0.2s ease;
-}
-waveform-preview .delete-waveform {
-  position: absolute;
-  top: 0;
-  right: 0;
-  cursor: pointer;
-  z-index: 10;
 }
 waveform-preview.loading .waveform-canvas {
   opacity: 0.4;
