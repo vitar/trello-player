@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <title>Audio Player for Trello Power-Up Popup</title>
-    <link rel="stylesheet" href="./trello-player.css?24">
+    <link rel="stylesheet" href="./trello-player.css?25">
   </head>
   <body>
     <div id="auth-form" class="hidden">
@@ -14,8 +14,8 @@
       <waveform-preview id="waveform-view"></waveform-preview>
       <div class="player-controls">
         <button class="circle-btn" id="prev-button" title="Previous">&#x23EE;&#xFE0E;</button> <!-- ⏮ &#x23EE; -->
-        <button class="circle-btn" id="play-button" title="Play">&#x25B6;&#xFE0E;</button> <!-- ▶ &#x25B6; -->
-        <button class="circle-btn" id="pause-button" title="Pause">&#x23F8;&#xFE0E;</button> <!-- ⏸ &#x23F8; -->
+        <button class="circle-btn" id="play-pause-button" title="Play">&#x25B6;&#xFE0E;</button> <!-- ▶ / ⏸ -->
+        <button class="circle-btn" id="ab-button" title="Set A|B repeat points">A|B</button>
         <button class="circle-btn" id="stop-button" title="Stop">&#x23F9;&#xFE0E;</button> <!-- ⏹ &#x23F9; -->
         <button class="circle-btn" id="next-button" title="Next">&#x23ED;&#xFE0E;</button> <!-- ⏭ &#x23ED; -->
       </div>
@@ -61,7 +61,8 @@
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.js"></script>
     <script src="./trello-player-config.js?1"></script>
-    <script src="./trello-player-power-up-popup.js?53"></script>
+    <script src="./trello-player-power-up-popup.js?54"></script>
   </body>
 </html>
