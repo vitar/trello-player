@@ -150,11 +150,12 @@ audio {
   font-size: 2em;
   color: var(--btn-color);
   background-color: color-mix(in srgb, var(--btn-bg) 50%, transparent);
+  border: 0px;
   border-radius: 50%;
-  width: 1em;
-  height: 1em;
+  width: 1.2em;
+  height: 1.2em;
   text-align: center;
-  line-height: 0.9;
+  line-height: 1;
   cursor: pointer;
   transition: background-color 0.3s, color 0.3s, transform 0.1s;
 }
