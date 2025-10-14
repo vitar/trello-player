@@ -14,6 +14,8 @@ let authForm = document.getElementById('auth-form');
 let apiKeyInput = document.getElementById('apikey-input');
 let pitchSlider = document.getElementById('pitch-slider');
 let pitchDisplay = document.getElementById('pitch-display');
+let speedSlider = document.getElementById('speed-slider');
+let speedDisplay = document.getElementById('speed-display');
 let trelloToken;
 let apiKey;
 let popup;
@@ -28,6 +30,10 @@ const PITCH_MIN = -7;
 const PITCH_MAX = 7;
 const PITCH_KEY_PREFIX = 'pitch:';
 let desiredPitchSemitones = 0;
+const PLAYBACK_SPEED_MIN = 0.5;
+const PLAYBACK_SPEED_MAX = 1;
+const PLAYBACK_SPEED_STEP = 0.05;
+let desiredPlaybackSpeed = 1;
 let audioContext = null;
 let soundtouchNode = null;
 let audioSourceNode = null;
@@ -212,6 +218,15 @@ function clampPitch(value) {
   return Math.min(PITCH_MAX, Math.max(PITCH_MIN, value));
 }
 
+function clampPlaybackSpeed(value) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  const clamped = Math.min(PLAYBACK_SPEED_MAX, Math.max(PLAYBACK_SPEED_MIN, value));
+  const steps = Math.round(clamped / PLAYBACK_SPEED_STEP);
+  return Number((steps * PLAYBACK_SPEED_STEP).toFixed(2));
+}
+
 function getPitchStorageKey(attachment) {
   return `${PITCH_KEY_PREFIX}${attachment.cardId}:${attachment.id}`;
 }
@@ -308,10 +323,18 @@ function updateAttachmentDurationDisplay(attachmentId) {
 }
 
 function updatePitchUI(value) {
-  if (pitchSlider) pitchSlider.value = value;
+  if (pitchSlider) pitchSlider.value = String(value);
   if (pitchDisplay) {
     const formatted = value > 0 ? `+${value}` : `${value}`;
     pitchDisplay.textContent = formatted;
+  }
+}
+
+function updatePlaybackSpeedUI(value) {
+  const formatted = value.toFixed(2);
+  if (speedSlider) speedSlider.value = formatted;
+  if (speedDisplay) {
+    speedDisplay.textContent = `${formatted}x`;
   }
 }
 
@@ -319,18 +342,43 @@ function setPitchControlsEnabled(enabled) {
   if (pitchSlider) pitchSlider.disabled = !enabled;
 }
 
-function updateSoundtouchPitch(value) {
+function setPlaybackSpeedControlsEnabled(enabled) {
+  if (speedSlider) speedSlider.disabled = !enabled;
+}
+
+function clearSoundtouchBuffers() {
+  if (!soundtouchNode || !soundtouchNode.port) {
+    return;
+  }
+  try {
+    soundtouchNode.port.postMessage({ type: 'clearBuffers' });
+  } catch (error) {
+    console.warn('Failed to clear SoundTouch buffers:', error);
+  }
+}
+
+function setSoundtouchParam(name, value) {
   if (!soundtouchNode || !audioContext) return;
   try {
-    const param = soundtouchNode.parameters?.get('pitchSemitones');
+    const param = soundtouchNode.parameters?.get(name);
     if (param) {
       param.setValueAtTime(value, audioContext.currentTime);
-    } else {
-      soundtouchNode.port?.postMessage({ type: 'pitchSemitones', value });
+    } else if (soundtouchNode.port) {
+      soundtouchNode.port.postMessage({ type: name, value });
     }
   } catch (error) {
-    console.error('Unable to update pitch parameter:', error);
+    console.error(`Unable to update ${name} parameter:`, error);
   }
+}
+
+function updateSoundtouchPitch(value) {
+  setSoundtouchParam('pitchSemitones', value);
+}
+
+function updateSoundtouchTempo(value) {
+  setSoundtouchParam('tempo', value);
+  setSoundtouchParam('rate', 1);
+  setSoundtouchParam('pitch', 1);
 }
 
 async function resumeAudioContext() {
@@ -345,13 +393,15 @@ async function resumeAudioContext() {
 
 async function ensureSoundtouchNode() {
   if (soundtouchNode) {
+    updateSoundtouchTempo(desiredPlaybackSpeed);
+    updateSoundtouchPitch(desiredPitchSemitones);
     return soundtouchNode;
   }
   if (!audioContext) {
     audioContext = new AudioContext();
   }
   if (!soundtouchModulePromise) {
-    soundtouchModulePromise = audioContext.audioWorklet.addModule('./soundtouch-worklet.js').catch((error) => {
+    soundtouchModulePromise = audioContext.audioWorklet.addModule('./soundtouch-worklet.js?4').catch((error) => {
       console.error('Failed to load SoundTouch worklet:', error);
       throw error;
     });
@@ -379,6 +429,7 @@ async function ensureSoundtouchNode() {
     }
   }
   audioSourceNode.connect(soundtouchNode);
+  updateSoundtouchTempo(desiredPlaybackSpeed);
   updateSoundtouchPitch(desiredPitchSemitones);
   return soundtouchNode;
 }
@@ -406,6 +457,24 @@ async function applyPitchValue(value, { persist = false } = {}) {
   }
 }
 
+async function applyPlaybackSpeed(value) {
+  const clamped = clampPlaybackSpeed(value);
+  const previousSpeed = desiredPlaybackSpeed;
+  desiredPlaybackSpeed = clamped;
+  updatePlaybackSpeedUI(clamped);
+  try {
+    await ensureSoundtouchNode();
+    await resumeAudioContext();
+    if (clamped !== previousSpeed) {
+      clearSoundtouchBuffers();
+    }
+    updateSoundtouchTempo(clamped);
+  } catch (error) {
+    console.warn('Playback speed adjustment unavailable:', error);
+  }
+  return clamped;
+}
+
 async function loadPlayer(token, key) {
   try {
     audioBlobCache.clear();
@@ -413,6 +482,9 @@ async function loadPlayer(token, key) {
     attachmentsList.innerHTML = '';
     attachmentDurations.clear();
     setPitchControlsEnabled(false);
+    setPlaybackSpeedControlsEnabled(false);
+    desiredPlaybackSpeed = 1;
+    updatePlaybackSpeedUI(desiredPlaybackSpeed);
     const listInfo = await t.list('id');
     const response = await fetch(`https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${key}&token=${token}`);
     const cards = await response.json();
@@ -445,6 +517,9 @@ async function loadPlayer(token, key) {
       audioPlayer.removeAttribute('src');
       audioPlayer.load();
       updatePitchUI(0);
+      desiredPlaybackSpeed = 1;
+      updatePlaybackSpeedUI(desiredPlaybackSpeed);
+      setPlaybackSpeedControlsEnabled(false);
     }
   }
   catch (error) {
@@ -459,6 +534,7 @@ async function loadAttachment(index) {
   }
 
   const previousIndex = currentAttachmentIndex;
+  const previousSpeed = desiredPlaybackSpeed;
   currentAttachmentIndex = index;
   const loadToken = ++currentLoadRequest;
   const attachment = m4aAttachments[index];
@@ -469,11 +545,14 @@ async function loadAttachment(index) {
   });
 
   setPitchControlsEnabled(false);
+  setPlaybackSpeedControlsEnabled(false);
   waveformView.hideStatus();
   waveformView.showLoading();
   let audioBlob;
   let audioUrl;
   try {
+    audioPlayer.pause();
+    clearSoundtouchBuffers();
     audioBlob = await getAttachmentBlob(attachment);
     if (loadToken !== currentLoadRequest) {
       return;
@@ -490,6 +569,8 @@ async function loadAttachment(index) {
     const pitchValue = clampPitch(Number(storedPitch));
     await applyPitchValue(pitchValue);
     setPitchControlsEnabled(true);
+    await applyPlaybackSpeed(1);
+    setPlaybackSpeedControlsEnabled(true);
     prefetchAdjacent(index);
     const playPromise = audioPlayer.play();
     if (playPromise !== undefined) {
@@ -508,6 +589,10 @@ async function loadAttachment(index) {
     attachmentsListItems.forEach((item, idx) => {
       item.classList.toggle('active', idx === currentAttachmentIndex);
     });
+    desiredPlaybackSpeed = previousSpeed;
+    updatePlaybackSpeedUI(desiredPlaybackSpeed);
+    updateSoundtouchTempo(desiredPlaybackSpeed);
+    setPlaybackSpeedControlsEnabled(m4aAttachments.length > 0);
     setPitchControlsEnabled(m4aAttachments.length > 0);
     updatePitchUI(desiredPitchSemitones);
     if (loadToken === currentLoadRequest) {
@@ -604,6 +689,7 @@ audioPlayer.addEventListener('loadedmetadata', () => {
 audioPlayer.addEventListener('play', async () => {
   try {
     await ensureSoundtouchNode();
+    updateSoundtouchTempo(desiredPlaybackSpeed);
     updateSoundtouchPitch(desiredPitchSemitones);
     await resumeAudioContext();
   } catch (error) {
@@ -613,6 +699,18 @@ audioPlayer.addEventListener('play', async () => {
 
 audioPlayer.addEventListener('playing', () => {
   waveformView.hideStatus();
+});
+
+audioPlayer.addEventListener('pause', () => {
+  clearSoundtouchBuffers();
+});
+
+audioPlayer.addEventListener('seeked', () => {
+  clearSoundtouchBuffers();
+});
+
+audioPlayer.addEventListener('loadstart', () => {
+  clearSoundtouchBuffers();
 });
 
 if (pitchSlider) {
@@ -625,6 +723,19 @@ if (pitchSlider) {
     applyPitchValue(value, { persist: true });
   });
   setPitchControlsEnabled(false);
+}
+
+if (speedSlider) {
+  speedSlider.addEventListener('input', (event) => {
+    const value = Number(event.target.value);
+    applyPlaybackSpeed(value);
+  });
+  speedSlider.addEventListener('change', (event) => {
+    const value = Number(event.target.value);
+    applyPlaybackSpeed(value);
+  });
+  updatePlaybackSpeedUI(desiredPlaybackSpeed);
+  setPlaybackSpeedControlsEnabled(false);
 }
 
 authorizeBtn.addEventListener('click', async () => {

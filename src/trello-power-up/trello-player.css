@@ -195,20 +195,27 @@ audio {
   display: grid;
   gap: 0.75em;
 }
+.pitch-controls label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5em;
+  font-weight: bold;
+}
+.pitch-controls label span {
+  font-variant-numeric: tabular-nums;
+}
+.pitch-controls input[type="range"] {
+  width: 100%;
+}
 .pitch-slider-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.75em;
 }
-.pitch-slider-row input[type="range"] {
-  width: 100%;
-}
 .pitch-limit {
   font-variant-numeric: tabular-nums;
-}
-.pitch-current {
-  font-weight: bold;
 }
 #waveform-modal .modal-actions {
   margin-top: 10px;
