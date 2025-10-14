@@ -1130,12 +1130,23 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
+    _this._muteFrames = 0;
     _this.port.onmessage = function (event) {
       if (!event || !event.data) {
         return;
       }
       if (event.data.type === 'clearBuffers') {
+        if (_this._pipe && _this._pipe.inputBuffer && _this._pipe.inputBuffer.clear) {
+          _this._pipe.inputBuffer.clear();
+        }
+        if (_this._pipe && _this._pipe._intermediateBuffer && _this._pipe._intermediateBuffer.clear) {
+          _this._pipe._intermediateBuffer.clear();
+        }
+        if (_this._pipe && _this._pipe.outputBuffer && _this._pipe.outputBuffer.clear) {
+          _this._pipe.outputBuffer.clear();
+        }
         _this._pipe.clear();
+        _this._muteFrames = Math.max(_this._muteFrames, _this.bufferSize * 2);
       }
     };
     return _this;
@@ -1174,6 +1185,13 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
           leftOutput[_i] = 0;
           rightOutput[_i] = 0;
         }
+      }
+      if (this._muteFrames > 0) {
+        for (var _j = 0; _j < leftOutput.length; _j++) {
+          leftOutput[_j] = 0;
+          rightOutput[_j] = 0;
+        }
+        this._muteFrames = Math.max(0, this._muteFrames - leftOutput.length);
       }
       return true;
     }
