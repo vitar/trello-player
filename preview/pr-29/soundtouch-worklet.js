@@ -1130,6 +1130,14 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
+    _this.port.onmessage = function (event) {
+      if (!event || !event.data) {
+        return;
+      }
+      if (event.data.type === 'clearBuffers') {
+        _this._pipe.clear();
+      }
+    };
     return _this;
   }
   _inherits(SoundTouchWorklet, _AudioWorkletProcesso);

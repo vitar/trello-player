@@ -30,7 +30,7 @@ const PITCH_MIN = -7;
 const PITCH_MAX = 7;
 const PITCH_KEY_PREFIX = 'pitch:';
 let desiredPitchSemitones = 0;
-const PLAYBACK_SPEED_MIN = 0.25;
+const PLAYBACK_SPEED_MIN = 0.5;
 const PLAYBACK_SPEED_MAX = 1;
 const PLAYBACK_SPEED_STEP = 0.05;
 let desiredPlaybackSpeed = 1;
@@ -346,6 +346,17 @@ function setPlaybackSpeedControlsEnabled(enabled) {
   if (speedSlider) speedSlider.disabled = !enabled;
 }
 
+function clearSoundtouchBuffers() {
+  if (!soundtouchNode || !soundtouchNode.port) {
+    return;
+  }
+  try {
+    soundtouchNode.port.postMessage({ type: 'clearBuffers' });
+  } catch (error) {
+    console.warn('Failed to clear SoundTouch buffers:', error);
+  }
+}
+
 function setSoundtouchParam(name, value) {
   if (!soundtouchNode || !audioContext) return;
   try {
@@ -448,11 +459,15 @@ async function applyPitchValue(value, { persist = false } = {}) {
 
 async function applyPlaybackSpeed(value) {
   const clamped = clampPlaybackSpeed(value);
+  const previousSpeed = desiredPlaybackSpeed;
   desiredPlaybackSpeed = clamped;
   updatePlaybackSpeedUI(clamped);
   try {
     await ensureSoundtouchNode();
     await resumeAudioContext();
+    if (clamped !== previousSpeed) {
+      clearSoundtouchBuffers();
+    }
     updateSoundtouchTempo(clamped);
   } catch (error) {
     console.warn('Playback speed adjustment unavailable:', error);
@@ -536,6 +551,8 @@ async function loadAttachment(index) {
   let audioBlob;
   let audioUrl;
   try {
+    audioPlayer.pause();
+    clearSoundtouchBuffers();
     audioBlob = await getAttachmentBlob(attachment);
     if (loadToken !== currentLoadRequest) {
       return;
@@ -682,6 +699,18 @@ audioPlayer.addEventListener('play', async () => {
 
 audioPlayer.addEventListener('playing', () => {
   waveformView.hideStatus();
+});
+
+audioPlayer.addEventListener('pause', () => {
+  clearSoundtouchBuffers();
+});
+
+audioPlayer.addEventListener('seeked', () => {
+  clearSoundtouchBuffers();
+});
+
+audioPlayer.addEventListener('loadstart', () => {
+  clearSoundtouchBuffers();
 });
 
 if (pitchSlider) {
