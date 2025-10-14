@@ -1130,39 +1130,134 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
-    _this._muteFrames = 0;
+    _this._muteGain = 1;
+    _this._muteState = 'idle';
+    _this._muteCounter = 0;
+    _this._muteFadeOutFrames = _this.bufferSize;
+    _this._muteHoldFrames = _this.bufferSize;
+    _this._muteFadeInFrames = _this.bufferSize;
+    _this._muteFromGain = 1;
+    _this._pendingClear = false;
     _this.port.onmessage = function (event) {
       if (!event || !event.data) {
         return;
       }
       if (event.data.type === 'clearBuffers') {
-        if (_this._pipe && _this._pipe.inputBuffer && _this._pipe.inputBuffer.clear) {
-          _this._pipe.inputBuffer.clear();
-        }
-        if (_this._pipe && _this._pipe._intermediateBuffer && _this._pipe._intermediateBuffer.clear) {
-          _this._pipe._intermediateBuffer.clear();
-        }
-        if (_this._pipe && _this._pipe.outputBuffer && _this._pipe.outputBuffer.clear) {
-          _this._pipe.outputBuffer.clear();
-        }
-        _this._pipe.clear();
-        _this._muteFrames = Math.max(_this._muteFrames, _this.bufferSize * 2);
+        var sr = typeof sampleRate === 'number' && !Number.isNaN(sampleRate) ? sampleRate : 44100;
+        _this._muteFadeOutFrames = Math.max(_this.bufferSize * 2, Math.floor(sr * 0.01));
+        _this._muteHoldFrames = Math.max(_this.bufferSize, Math.floor(sr * 0.005));
+        _this._muteFadeInFrames = Math.max(_this.bufferSize * 2, Math.floor(sr * 0.015));
+        _this._pendingClear = true;
+        _this._muteState = 'fadeOut';
+        _this._muteCounter = 0;
+        _this._muteFromGain = _this._muteGain;
       }
     };
     return _this;
   }
   _inherits(SoundTouchWorklet, _AudioWorkletProcesso);
   return _createClass(SoundTouchWorklet, [{
+    key: "_clearInternalBuffers",
+    value: function _clearInternalBuffers() {
+      if (this._pipe && this._pipe.inputBuffer && this._pipe.inputBuffer.clear) {
+        this._pipe.inputBuffer.clear();
+      }
+      if (this._pipe && this._pipe._intermediateBuffer && this._pipe._intermediateBuffer.clear) {
+        this._pipe._intermediateBuffer.clear();
+      }
+      if (this._pipe && this._pipe.outputBuffer && this._pipe.outputBuffer.clear) {
+        this._pipe.outputBuffer.clear();
+      }
+      if (this._pipe && this._pipe.clear) {
+        this._pipe.clear();
+      }
+    }
+  }, {
+    key: "_nextMuteGain",
+    value: function _nextMuteGain() {
+      if (this._muteState === 'fadeOut') {
+        if (this._muteFadeOutFrames <= 0) {
+          this._muteState = 'hold';
+          this._muteCounter = 0;
+          this._muteGain = 0;
+          if (this._pendingClear) {
+            this._clearInternalBuffers();
+            this._pendingClear = false;
+          }
+          return 0;
+        }
+        var startGain = typeof this._muteFromGain === 'number' ? this._muteFromGain : 1;
+        var progress = Math.min(1, this._muteCounter / this._muteFadeOutFrames);
+        var gain = startGain + (0 - startGain) * progress;
+        this._muteCounter++;
+        if (this._muteCounter >= this._muteFadeOutFrames) {
+          this._muteState = 'hold';
+          this._muteCounter = 0;
+          this._muteGain = 0;
+          this._muteFromGain = 0;
+          if (this._pendingClear) {
+            this._clearInternalBuffers();
+            this._pendingClear = false;
+          }
+          return 0;
+        }
+        this._muteGain = gain;
+        return gain;
+      }
+      if (this._muteState === 'hold') {
+        this._muteCounter++;
+        this._muteGain = 0;
+        if (this._muteCounter >= this._muteHoldFrames) {
+          this._muteState = 'fadeIn';
+          this._muteCounter = 0;
+        }
+        return 0;
+      }
+      if (this._muteState === 'fadeIn') {
+        if (this._muteFadeInFrames <= 0) {
+          this._muteState = 'idle';
+          this._muteCounter = 0;
+          this._muteGain = 1;
+          this._muteFromGain = 1;
+          return 1;
+        }
+        this._muteCounter++;
+        var fadeInProgress = Math.min(1, this._muteCounter / this._muteFadeInFrames);
+        var fadeGain = fadeInProgress;
+        if (this._muteCounter >= this._muteFadeInFrames) {
+          this._muteState = 'idle';
+          this._muteCounter = 0;
+          this._muteFromGain = 1;
+        }
+        this._muteGain = fadeGain;
+        return fadeGain;
+      }
+      this._muteGain = 1;
+      this._muteFromGain = 1;
+      return 1;
+    }
+  }, {
     key: "process",
     value: function process(inputs, outputs, parameters) {
       var _parameters$rate$, _parameters$tempo$, _parameters$pitch$, _parameters$pitchSemi;
-      if (!inputs[0].length) return true;
+      var outputChannels = outputs[0];
+      if (!outputChannels || !outputChannels.length || !outputChannels[0]) {
+        return false;
+      }
+      var leftOutput = outputChannels[0];
+      var rightOutput = outputChannels.length > 1 ? outputChannels[1] : outputChannels[0];
+      if (!inputs[0].length) {
+        for (var silenceIndex = 0; silenceIndex < leftOutput.length; silenceIndex++) {
+          var silentGain = this._nextMuteGain();
+          leftOutput[silenceIndex] = 0 * silentGain;
+          rightOutput[silenceIndex] = 0 * silentGain;
+        }
+        return true;
+      }
       var leftInput = inputs[0][0];
       var rightInput = inputs[0].length > 1 ? inputs[0][1] : inputs[0][0];
-      var leftOutput = outputs[0][0];
-      var rightOutput = outputs[0].length > 1 ? outputs[0][1] : outputs[0][0];
       var samples = this._samples;
-      if (!leftOutput || !leftOutput.length) return false;
+      if (!leftOutput.length) return false;
       var rate = (_parameters$rate$ = parameters.rate[0]) !== null && _parameters$rate$ !== void 0 ? _parameters$rate$ : parameters.rate;
       var tempo = (_parameters$tempo$ = parameters.tempo[0]) !== null && _parameters$tempo$ !== void 0 ? _parameters$tempo$ : parameters.tempo;
       var pitch = (_parameters$pitch$ = parameters.pitch[0]) !== null && _parameters$pitch$ !== void 0 ? _parameters$pitch$ : parameters.pitch;
@@ -1179,19 +1274,15 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
       var processedSamples = new Float32Array(leftInput.length * 2);
       this._pipe.outputBuffer.receiveSamples(processedSamples, leftOutput.length);
       for (var _i = 0; _i < leftInput.length; _i++) {
-        leftOutput[_i] = processedSamples[_i * 2];
-        rightOutput[_i] = processedSamples[_i * 2 + 1];
-        if (isNaN(leftOutput[_i]) || isNaN(rightOutput[_i])) {
-          leftOutput[_i] = 0;
-          rightOutput[_i] = 0;
+        var leftValue = processedSamples[_i * 2];
+        var rightValue = processedSamples[_i * 2 + 1];
+        if (isNaN(leftValue) || isNaN(rightValue)) {
+          leftValue = 0;
+          rightValue = 0;
         }
-      }
-      if (this._muteFrames > 0) {
-        for (var _j = 0; _j < leftOutput.length; _j++) {
-          leftOutput[_j] = 0;
-          rightOutput[_j] = 0;
-        }
-        this._muteFrames = Math.max(0, this._muteFrames - leftOutput.length);
+        var gain = this._nextMuteGain();
+        leftOutput[_i] = leftValue * gain;
+        rightOutput[_i] = rightValue * gain;
       }
       return true;
     }
