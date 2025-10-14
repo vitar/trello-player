@@ -157,7 +157,28 @@ audio {
 }
 .wrench {
   margin-left: 5px;
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif;
+  font-size: 1.5em;
+  color: var(--btn-color);
+  background-color: var(--btn-bg);
+  border: 2px solid var(--btn-color);
+  border-radius: 50%;
+  width: 2em;
+  height: 2em;
+  text-align: center;
+  line-height: 1;
   cursor: pointer;
+  transition: background-color 0.3s, color 0.3s, transform 0.1s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .wrench:hover {
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-text);
+  }
+}
+.wrench:active {
+  transform: scale(0.95);
+  filter: brightness(0.8);
 }
 #waveform-view .wrench.floating {
   position: absolute;
