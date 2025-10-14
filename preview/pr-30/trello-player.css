@@ -160,7 +160,6 @@ audio {
   font-size: 2em;
   color: var(--btn-color);
   background-color: color-mix(in srgb, var(--btn-bg) 50%, transparent);
-  border: 1px solid var(--btn-color);
   border-radius: 50%;
   width: 1em;
   height: 1em;
