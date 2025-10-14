@@ -156,17 +156,16 @@ audio {
   z-index: 10;
 }
 .wrench {
-  margin-left: 5px;
   font-family: "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif;
   font-size: 2em;
   color: var(--btn-color);
-  background-color: var(--btn-bg);
-  border: 2px solid var(--btn-color);
+  background-color: color-mix(in srgb, var(--btn-bg) 50%, transparent);
+  border: 1px solid var(--btn-color);
   border-radius: 50%;
-  width: 2em;
-  height: 2em;
+  width: 1em;
+  height: 1em;
   text-align: center;
-  line-height: 1;
+  line-height: 0.9;
   cursor: pointer;
   transition: background-color 0.3s, color 0.3s, transform 0.1s;
 }
