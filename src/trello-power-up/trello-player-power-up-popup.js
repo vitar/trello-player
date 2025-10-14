@@ -6,6 +6,8 @@ let attachmentsList = document.getElementById('attachments-list');
 let waveformView = document.getElementById('waveform-view');
 let waveformTemplate = document.getElementById('waveform-template');
 let attachmentTemplate = document.getElementById('attachment-template');
+let playPauseButton = document.getElementById('play-pause-button');
+let abButton = document.getElementById('ab-button');
 let modal = document.getElementById('waveform-modal');
 let cancelBtn = document.getElementById('cancel-waveform');
 let authorizeBtn = document.getElementById('authorize-button');
@@ -38,6 +40,11 @@ let audioContext = null;
 let soundtouchNode = null;
 let audioSourceNode = null;
 let soundtouchModulePromise = null;
+const AB_MIN_DURATION = 0.05;
+let abPointA = null;
+let abPointB = null;
+let abRepeatActive = false;
+let isClearingAbRegion = false;
 
 function isValidToken(token) {
   const isString = typeof token === 'string';
@@ -74,24 +81,60 @@ class WaveformPreview extends HTMLElement {
     this.placeholder = this.querySelector('.waveform-placeholder');
     this.status = this.querySelector('.waveform-status');
     this.loadingTimer = null;
+    this.regionsPlugin = null;
+    this.abLoopRegion = null;
+    this.abRegionUpdateListener = null;
+    this.abRegionRemovalListener = null;
   }
   createPlayer(options = {}) {
     if (this.wavesurfer) {
       this.wavesurfer.destroy();
     }
     this.canvas.innerHTML = '';
+    this.abLoopRegion = null;
+    this.regionsPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
-    this.wavesurfer = WaveSurfer.create({
+    const plugins = [];
+    if (WaveSurfer?.Regions?.create) {
+      this.regionsPlugin = WaveSurfer.Regions.create({
+        dragSelection: false
+      });
+      plugins.push(this.regionsPlugin);
+    }
+    const mergedOptions = {
       container: this.canvas,
       height: 80,
       normalize: true,
-      fetchParans: { signal },
+      fetchParams: { signal },
       ...options
-    });
+    };
+    const optionPlugins = Array.isArray(mergedOptions.plugins) ? mergedOptions.plugins : [];
+    if (plugins.length > 0 || optionPlugins.length > 0) {
+      mergedOptions.plugins = [...optionPlugins, ...plugins];
+    }
+    this.wavesurfer = WaveSurfer.create(mergedOptions);
     this.wavesurfer.on('destroy', () => {
       abortController.abort();
-    })
+    });
+    if (this.regionsPlugin) {
+      this.regionsPlugin.on('region-updated', (region) => {
+        if (this.abLoopRegion && region && region.id === this.abLoopRegion.id) {
+          this.abLoopRegion = region;
+          if (this.abRegionUpdateListener) {
+            this.abRegionUpdateListener(region.start, region.end);
+          }
+        }
+      });
+      this.regionsPlugin.on('region-removed', (region) => {
+        if (this.abLoopRegion && region && region.id === this.abLoopRegion.id) {
+          this.abLoopRegion = null;
+          if (this.abRegionRemovalListener) {
+            this.abRegionRemovalListener();
+          }
+        }
+      });
+    }
     return this.wavesurfer;
   }
   loadFromData(peaks, duration, options = {}) {
@@ -123,6 +166,8 @@ class WaveformPreview extends HTMLElement {
       this.wavesurfer.destroy();
       this.wavesurfer = null;
     }
+    this.abLoopRegion = null;
+    this.regionsPlugin = null;
     this.canvas.innerHTML = '';
     this.hideLoading();
     this.hideStatus();
@@ -166,6 +211,44 @@ class WaveformPreview extends HTMLElement {
     this.status.textContent = '';
     this.status.classList.add('hidden');
   }
+  setAbRegionUpdateHandler(handler) {
+    this.abRegionUpdateListener = handler;
+  }
+  setAbRegionRemovalHandler(handler) {
+    this.abRegionRemovalListener = handler;
+  }
+  setAbLoopRegion(start, end) {
+    if (!this.regionsPlugin || !this.wavesurfer) {
+      return null;
+    }
+    const sanitizedStart = Math.max(0, Number(start) || 0);
+    const sanitizedEnd = Math.max(sanitizedStart, Number(end) || sanitizedStart);
+    const styles = getComputedStyle(document.documentElement);
+    const regionColor = styles.getPropertyValue('--waveform-region-color')?.trim() || 'rgba(110, 170, 255, 0.3)';
+    const handleColor = styles.getPropertyValue('--waveform-region-handle-color')?.trim() || 'rgba(150, 190, 255, 0.75)';
+    if (this.abLoopRegion) {
+      this.abLoopRegion.remove();
+      this.abLoopRegion = null;
+    }
+    this.abLoopRegion = this.regionsPlugin.addRegion({
+      start: sanitizedStart,
+      end: sanitizedEnd,
+      drag: true,
+      resize: true,
+      color: regionColor,
+      handleColor
+    });
+    if (this.abRegionUpdateListener) {
+      this.abRegionUpdateListener(this.abLoopRegion.start, this.abLoopRegion.end);
+    }
+    return this.abLoopRegion;
+  }
+  clearAbLoopRegion() {
+    if (this.abLoopRegion) {
+      this.abLoopRegion.remove();
+      this.abLoopRegion = null;
+    }
+  }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
   }
@@ -177,6 +260,219 @@ class WaveformPreview extends HTMLElement {
   }
 }
 customElements.define('waveform-preview', WaveformPreview);
+
+function isAudioPlaying() {
+  return audioPlayer && !audioPlayer.paused && !audioPlayer.ended && audioPlayer.currentTime >= 0;
+}
+
+function getCurrentTrackDuration() {
+  if (audioPlayer && Number.isFinite(audioPlayer.duration) && audioPlayer.duration > 0) {
+    return audioPlayer.duration;
+  }
+  if (waveformView && typeof waveformView.getDuration === 'function') {
+    const waveformDuration = waveformView.getDuration();
+    if (Number.isFinite(waveformDuration) && waveformDuration > 0) {
+      return waveformDuration;
+    }
+  }
+  const attachmentId = audioPlayer?.dataset?.attachmentId;
+  if (attachmentId) {
+    const storedDuration = attachmentDurations.get(attachmentId);
+    if (Number.isFinite(storedDuration) && storedDuration > 0) {
+      return storedDuration;
+    }
+  }
+  return null;
+}
+
+function hasValidAbLoop() {
+  return abRepeatActive && abPointA !== null && abPointB !== null && (abPointB - abPointA) >= AB_MIN_DURATION;
+}
+
+function updatePlayPauseButton() {
+  if (!playPauseButton) return;
+  if (isAudioPlaying()) {
+    playPauseButton.innerHTML = '&#x23F8;&#xFE0E;';
+    playPauseButton.title = 'Pause';
+  } else {
+    playPauseButton.innerHTML = '&#x25B6;&#xFE0E;';
+    playPauseButton.title = 'Play';
+  }
+}
+
+function updateAbButtonState() {
+  if (!abButton) return;
+  const hasA = abPointA !== null;
+  const hasB = abPointB !== null;
+  const active = hasValidAbLoop();
+  abButton.classList.toggle('active', active);
+  abButton.classList.toggle('pending', hasA && !hasB && !active);
+  abButton.setAttribute('aria-pressed', String(active));
+  if (active) {
+    abButton.title = 'Clear A|B repeat';
+  } else if (hasA && !hasB) {
+    abButton.title = 'Set B point for A|B repeat';
+  } else {
+    abButton.title = 'Set A|B repeat points';
+  }
+}
+
+function setAbButtonEnabled(enabled) {
+  if (!abButton) return;
+  abButton.disabled = !enabled;
+  if (!enabled) {
+    abButton.classList.remove('active', 'pending');
+    abButton.setAttribute('aria-pressed', 'false');
+    abButton.title = 'Set A|B repeat points';
+  }
+  updateAbButtonState();
+}
+
+function ensureAbLoopRegion() {
+  if (!waveformView || typeof waveformView.setAbLoopRegion !== 'function') {
+    return;
+  }
+  if (hasValidAbLoop()) {
+    waveformView.setAbLoopRegion(abPointA, abPointB);
+  } else if (!abRepeatActive && typeof waveformView.clearAbLoopRegion === 'function') {
+    isClearingAbRegion = true;
+    waveformView.clearAbLoopRegion();
+    isClearingAbRegion = false;
+  }
+}
+
+function resetAbLoop() {
+  abPointA = null;
+  abPointB = null;
+  abRepeatActive = false;
+  if (waveformView && typeof waveformView.clearAbLoopRegion === 'function') {
+    isClearingAbRegion = true;
+    waveformView.clearAbLoopRegion();
+    isClearingAbRegion = false;
+  }
+  updateAbButtonState();
+}
+
+function enforceAbLoop() {
+  if (!hasValidAbLoop()) {
+    return;
+  }
+  const current = audioPlayer.currentTime;
+  const loopStart = abPointA;
+  const loopEnd = abPointB;
+  if (loopEnd <= loopStart) {
+    return;
+  }
+  if (current < loopStart) {
+    audioPlayer.currentTime = loopStart;
+    return;
+  }
+  if (current >= loopEnd - 0.02) {
+    audioPlayer.currentTime = loopStart;
+    if (audioPlayer.paused && !audioPlayer.ended) {
+      audioPlayer.play().catch(() => {});
+    }
+  }
+}
+
+function primePlaybackForAbLoop() {
+  if (!hasValidAbLoop()) {
+    return;
+  }
+  const loopStart = abPointA;
+  const loopEnd = abPointB;
+  if (loopEnd <= loopStart) {
+    return;
+  }
+  if (audioPlayer.currentTime < loopStart || audioPlayer.currentTime >= loopEnd) {
+    audioPlayer.currentTime = loopStart;
+  }
+}
+
+function handleAbButtonClick() {
+  if (!abButton || abButton.disabled || !audioPlayer || !audioPlayer.src) {
+    return;
+  }
+
+  if (hasValidAbLoop()) {
+    resetAbLoop();
+    return;
+  }
+
+  if (abPointA === null) {
+    const isPlaying = isAudioPlaying();
+    abPointA = isPlaying ? audioPlayer.currentTime : 0;
+    abPointB = null;
+    abRepeatActive = false;
+    ensureAbLoopRegion();
+    updateAbButtonState();
+    return;
+  }
+
+  if (abPointB === null) {
+    const isPlaying = isAudioPlaying();
+    let targetEnd;
+    if (isPlaying) {
+      targetEnd = audioPlayer.currentTime;
+    } else {
+      targetEnd = getCurrentTrackDuration();
+      if (!Number.isFinite(targetEnd) || targetEnd <= 0) {
+        alert('Track duration is not available yet. Please try again after the audio loads.');
+        return;
+      }
+    }
+    const duration = getCurrentTrackDuration();
+    if (Number.isFinite(duration) && duration > 0) {
+      targetEnd = Math.min(targetEnd, duration);
+    }
+    if (!Number.isFinite(targetEnd)) {
+      targetEnd = abPointA + AB_MIN_DURATION;
+    }
+    if (targetEnd <= abPointA + AB_MIN_DURATION) {
+      const fallbackDuration = duration ?? (abPointA + AB_MIN_DURATION);
+      targetEnd = Math.min(fallbackDuration, abPointA + AB_MIN_DURATION);
+    }
+    if (targetEnd <= abPointA) {
+      return;
+    }
+    abPointB = targetEnd;
+    abRepeatActive = true;
+    ensureAbLoopRegion();
+    updateAbButtonState();
+    enforceAbLoop();
+    return;
+  }
+
+  resetAbLoop();
+}
+
+if (waveformView && typeof waveformView.setAbRegionUpdateHandler === 'function') {
+  waveformView.setAbRegionUpdateHandler((start, end) => {
+    abPointA = start;
+    abPointB = end;
+    if (!abRepeatActive && start !== null && end !== null && end > start) {
+      abRepeatActive = true;
+    }
+    updateAbButtonState();
+    enforceAbLoop();
+  });
+}
+
+if (waveformView && typeof waveformView.setAbRegionRemovalHandler === 'function') {
+  waveformView.setAbRegionRemovalHandler(() => {
+    if (isClearingAbRegion) {
+      return;
+    }
+    abPointA = null;
+    abPointB = null;
+    abRepeatActive = false;
+    updateAbButtonState();
+  });
+}
+
+updatePlayPauseButton();
+updateAbButtonState();
+setAbButtonEnabled(false);
 
 function revokeCurrentObjectUrl() {
   if (currentObjectUrl) {
@@ -470,6 +766,8 @@ async function loadPlayer(token, key) {
     m4aAttachments = [];
     attachmentsList.innerHTML = '';
     attachmentDurations.clear();
+    resetAbLoop();
+    setAbButtonEnabled(false);
     setPitchControlsEnabled(false);
     setPlaybackSpeedControlsEnabled(false);
     desiredPlaybackSpeed = 1;
@@ -509,11 +807,15 @@ async function loadPlayer(token, key) {
       desiredPlaybackSpeed = 1;
       updatePlaybackSpeedUI(desiredPlaybackSpeed);
       setPlaybackSpeedControlsEnabled(false);
+      resetAbLoop();
+      setAbButtonEnabled(false);
     }
   }
   catch (error) {
     console.error('Error fetching attachments:', error);
     alert('Failed to load attachments. Please try again.');
+    resetAbLoop();
+    setAbButtonEnabled(false);
   }
 }
 
@@ -524,6 +826,8 @@ async function loadAttachment(index) {
 
   const previousIndex = currentAttachmentIndex;
   const previousSpeed = desiredPlaybackSpeed;
+  resetAbLoop();
+  setAbButtonEnabled(false);
   currentAttachmentIndex = index;
   const loadToken = ++currentLoadRequest;
   const attachment = m4aAttachments[index];
@@ -554,6 +858,7 @@ async function loadAttachment(index) {
     audioPlayer.dataset.attachmentId = attachment.id;
     audioPlayer.dataset.loadToken = String(loadToken);
     showWaveform(audioUrl);
+    setAbButtonEnabled(true);
     const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
     const pitchValue = clampPitch(Number(storedPitch));
     await applyPitchValue(pitchValue);
@@ -587,6 +892,7 @@ async function loadAttachment(index) {
     if (loadToken === currentLoadRequest) {
       waveformView.hideLoading();
     }
+    setAbButtonEnabled(m4aAttachments.length > 0);
   }
 }
 
@@ -602,13 +908,19 @@ document.getElementById('next-button').addEventListener('click', () => {
   }
 });
 
-document.getElementById('play-button').addEventListener('click', () => {
-  audioPlayer.play();
-});
+if (playPauseButton) {
+  playPauseButton.addEventListener('click', () => {
+    if (audioPlayer.paused || audioPlayer.ended) {
+      audioPlayer.play();
+    } else {
+      audioPlayer.pause();
+    }
+  });
+}
 
-document.getElementById('pause-button').addEventListener('click', () => {
-  audioPlayer.pause();
-});
+if (abButton) {
+  abButton.addEventListener('click', handleAbButtonClick);
+}
 
 document.getElementById('stop-button').addEventListener('click', () => {
   audioPlayer.pause();
@@ -655,6 +967,12 @@ modal.addEventListener('click', outsideClickClose);
 modal.addEventListener('touchstart', outsideClickClose);
 
 audioPlayer.addEventListener('ended', () => {
+  updatePlayPauseButton();
+  if (hasValidAbLoop()) {
+    audioPlayer.currentTime = abPointA;
+    audioPlayer.play().catch(() => {});
+    return;
+  }
   if (currentAttachmentIndex < m4aAttachments.length - 1) {
     loadAttachment(currentAttachmentIndex + 1);
   }
@@ -675,6 +993,8 @@ audioPlayer.addEventListener('loadedmetadata', () => {
 });
 
 audioPlayer.addEventListener('play', async () => {
+  updatePlayPauseButton();
+  primePlaybackForAbLoop();
   try {
     await ensureSoundtouchNode();
     updateSoundtouchTempo(desiredPlaybackSpeed);
@@ -687,19 +1007,25 @@ audioPlayer.addEventListener('play', async () => {
 
 audioPlayer.addEventListener('playing', () => {
   waveformView.hideStatus();
+  updatePlayPauseButton();
 });
 
 audioPlayer.addEventListener('pause', () => {
   clearSoundtouchBuffers();
+  updatePlayPauseButton();
 });
 
 audioPlayer.addEventListener('seeked', () => {
   clearSoundtouchBuffers();
+  enforceAbLoop();
 });
 
 audioPlayer.addEventListener('loadstart', () => {
   clearSoundtouchBuffers();
+  updatePlayPauseButton();
 });
+
+audioPlayer.addEventListener('timeupdate', enforceAbLoop);
 
 if (pitchSlider) {
   pitchSlider.addEventListener('input', (event) => {
