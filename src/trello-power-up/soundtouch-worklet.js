@@ -1171,6 +1171,11 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
       if (this._pipe && this._pipe.clear) {
         this._pipe.clear();
       }
+      if (typeof SoundTouch === 'function') {
+        this._pipe = new SoundTouch();
+      } else {
+        this._pipe = null;
+      }
     }
   }, {
     key: "_nextMuteGain",
@@ -1251,6 +1256,16 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
           var silentGain = this._nextMuteGain();
           leftOutput[silenceIndex] = 0 * silentGain;
           rightOutput[silenceIndex] = 0 * silentGain;
+        }
+        return true;
+      }
+      if (!this._pipe && typeof SoundTouch === 'function') {
+        this._pipe = new SoundTouch();
+      }
+      if (!this._pipe) {
+        for (var fallbackIndex = 0; fallbackIndex < leftOutput.length; fallbackIndex++) {
+          leftOutput[fallbackIndex] = 0;
+          rightOutput[fallbackIndex] = 0;
         }
         return true;
       }

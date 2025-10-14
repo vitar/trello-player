@@ -401,7 +401,7 @@ async function ensureSoundtouchNode() {
     audioContext = new AudioContext();
   }
   if (!soundtouchModulePromise) {
-    soundtouchModulePromise = audioContext.audioWorklet.addModule('./soundtouch-worklet.js?3').catch((error) => {
+    soundtouchModulePromise = audioContext.audioWorklet.addModule('./soundtouch-worklet.js?4').catch((error) => {
       console.error('Failed to load SoundTouch worklet:', error);
       throw error;
     });
