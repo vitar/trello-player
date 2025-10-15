@@ -1,8 +1,14 @@
 # Audio Player Power-Up for Trello
 
-Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list. Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.  The Power-Up display a waveform and allow to shift pitch from -4 to +4 semitones.
+Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list.
 
-<img src="trello-player-screenshot.png" width="600">
+Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.
+
+<img src="trello-player-v0.5-screenshot1.png" width="600">
+
+The Power-Up display a waveform, allow to repeat a region, to shift pitch from -7 to +7 semitones, change playback speed from 0.5x to 1x.
+
+<img src="trello-player-v0.5-screenshot2.png" width="600">
 
 The files in this repository are static and can be hosted on any static hosting provider.  GitHub Pages works well &mdash; fork https://github.com/vitar/trello-player/ repository and enable Pages to serve the files, choose **gh-pages** branch.
 
@@ -91,7 +97,19 @@ This Power-Up does not conform to Trello requirements (GutHub Pages limitations)
 
 ## License
 
-The project is released under the [Unlicense](LICENSE).  Security issues can be reported by opening an issue in this repository as described in [SECURITY.md](SECURITY.md).
+This project is licensed under the [GNU Lesser General Public License v2.1 or later](LICENSE).
+
+It also includes third-party components:
+
+- **SoundTouch Audio Worklet v0.2.1**  
+  Copyright © Olli Parviainen, Ryan Berdeen, Jakub Fiala, Steve "Cutter" Blades  
+  Licensed under the [GNU Lesser General Public License v2.1 or later](LICENSE.LGPL-2.1).
+
+- **WaveSurfer.js**  
+  Copyright © katspaugh and contributors  
+  Licensed under the [BSD 3-Clause License](LICENSE.BSD-3-Clause).
+
+Security issues can be reported by opening an issue in this repository as described in [SECURITY.md](SECURITY.md).
 
 ## Development
 
