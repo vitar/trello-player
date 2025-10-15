@@ -151,6 +151,21 @@ class WaveformPreview extends HTMLElement {
     this.abLoopRegion = null;
     this.abRegionUpdateListener = null;
     this.abRegionRemovalListener = null;
+    this.zoomPlugin = null;
+    this.scrollTarget = null;
+    this.currentZoom = 1;
+    this.minZoom = 1;
+    this.maxZoom = 16;
+    this.touchState = null;
+    this.handleTouchStart = this.handleTouchStart.bind(this);
+    this.handleTouchMove = this.handleTouchMove.bind(this);
+    this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    if (this.canvas) {
+      this.canvas.addEventListener('touchstart', this.handleTouchStart, { passive: false });
+      this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+      this.canvas.addEventListener('touchend', this.handleTouchEnd, { passive: true });
+      this.canvas.addEventListener('touchcancel', this.handleTouchEnd, { passive: true });
+    }
   }
   createPlayer(options = {}) {
     if (this.wavesurfer) {
@@ -159,6 +174,10 @@ class WaveformPreview extends HTMLElement {
     this.canvas.innerHTML = '';
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
+    this.scrollTarget = null;
+    this.currentZoom = this.minZoom;
+    this.touchState = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
     const plugins = [];
@@ -168,10 +187,19 @@ class WaveformPreview extends HTMLElement {
       });
       plugins.push(this.regionsPlugin);
     }
+    if (WaveSurfer?.Zoom?.create) {
+      this.zoomPlugin = WaveSurfer.Zoom.create({
+        scale: this.currentZoom,
+        minZoom: this.minZoom,
+        maxZoom: this.maxZoom
+      });
+      plugins.push(this.zoomPlugin);
+    }
     const mergedOptions = {
       container: this.canvas,
       height: 80,
       normalize: true,
+      scrollParent: true,
       fetchParams: { signal },
       ...options
     };
@@ -182,6 +210,10 @@ class WaveformPreview extends HTMLElement {
     this.wavesurfer = WaveSurfer.create(mergedOptions);
     this.wavesurfer.on('destroy', () => {
       abortController.abort();
+    });
+    this.wavesurfer.once('ready', () => {
+      this.resetZoom();
+      this.ensureScrollTarget();
     });
     if (this.regionsPlugin) {
       this.regionsPlugin.on('region-updated', (region) => {
@@ -234,6 +266,10 @@ class WaveformPreview extends HTMLElement {
     }
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
+    this.scrollTarget = null;
+    this.touchState = null;
+    this.currentZoom = this.minZoom;
     this.canvas.innerHTML = '';
     this.hideLoading();
     this.hideStatus();
@@ -276,6 +312,213 @@ class WaveformPreview extends HTMLElement {
     if (!this.status) return;
     this.status.textContent = '';
     this.status.classList.add('hidden');
+  }
+  getScrollableTarget() {
+    if (!this.wavesurfer) {
+      return null;
+    }
+    if (this.scrollTarget && this.scrollTarget.isConnected) {
+      return this.scrollTarget;
+    }
+    let target = null;
+    if (typeof this.wavesurfer.getWrapper === 'function') {
+      target = this.wavesurfer.getWrapper();
+    }
+    if ((!target || !(target instanceof HTMLElement)) && this.canvas) {
+      target = this.canvas.querySelector('.ws-wrapper');
+    }
+    if ((!target || !(target instanceof HTMLElement)) && this.canvas?.firstElementChild instanceof HTMLElement) {
+      target = this.canvas.firstElementChild;
+    }
+    if (target instanceof HTMLElement) {
+      if (!target.style.overflowX) {
+        target.style.overflowX = 'auto';
+      }
+      if (!target.style.touchAction) {
+        target.style.touchAction = 'manipulation';
+      }
+      this.scrollTarget = target;
+      return target;
+    }
+    return null;
+  }
+  ensureScrollTarget() {
+    const target = this.getScrollableTarget();
+    if (target) {
+      if (this.isZoomedIn()) {
+        target.style.cursor = 'grab';
+      } else {
+        target.style.cursor = '';
+        target.scrollLeft = 0;
+      }
+    }
+    return target;
+  }
+  resetZoom() {
+    this.currentZoom = this.minZoom;
+    if (this.zoomPlugin) {
+      if (typeof this.zoomPlugin.resetZoom === 'function') {
+        this.zoomPlugin.resetZoom();
+      } else if (typeof this.zoomPlugin.zoom === 'function') {
+        this.zoomPlugin.zoom(this.currentZoom);
+      }
+      if (typeof this.zoomPlugin.getZoom === 'function') {
+        const zoomValue = this.zoomPlugin.getZoom();
+        if (typeof zoomValue === 'number' && !Number.isNaN(zoomValue)) {
+          this.currentZoom = zoomValue;
+        }
+      }
+    } else if (this.wavesurfer && typeof this.wavesurfer.zoom === 'function') {
+      this.wavesurfer.zoom(this.currentZoom);
+    }
+    const target = this.ensureScrollTarget();
+    if (target) {
+      target.scrollLeft = 0;
+    }
+  }
+  applyZoom(value) {
+    if (!this.wavesurfer) {
+      return;
+    }
+    const clamped = Math.max(this.minZoom, Math.min(this.maxZoom, value));
+    if (this.zoomPlugin) {
+      if (typeof this.zoomPlugin.zoom === 'function') {
+        this.zoomPlugin.zoom(clamped);
+      } else if (typeof this.zoomPlugin.setZoom === 'function') {
+        this.zoomPlugin.setZoom(clamped);
+      }
+      if (typeof this.zoomPlugin.getZoom === 'function') {
+        const zoomValue = this.zoomPlugin.getZoom();
+        if (typeof zoomValue === 'number' && !Number.isNaN(zoomValue)) {
+          this.currentZoom = zoomValue;
+        } else {
+          this.currentZoom = clamped;
+        }
+      } else {
+        this.currentZoom = clamped;
+      }
+    } else if (typeof this.wavesurfer.zoom === 'function') {
+      this.wavesurfer.zoom(clamped);
+      this.currentZoom = clamped;
+    } else {
+      this.currentZoom = clamped;
+    }
+    this.ensureScrollTarget();
+  }
+  isZoomedIn() {
+    return this.currentZoom > this.minZoom + 0.01;
+  }
+  getPinchDistance(touches) {
+    if (!touches || touches.length < 2) {
+      return 0;
+    }
+    const [first, second] = touches;
+    const dx = first.clientX - second.clientX;
+    const dy = first.clientY - second.clientY;
+    return Math.hypot(dx, dy);
+  }
+  handleTouchStart(event) {
+    if (!this.wavesurfer) {
+      return;
+    }
+    if (event.touches.length === 2 && (this.zoomPlugin || (this.wavesurfer && typeof this.wavesurfer.zoom === 'function'))) {
+      event.preventDefault();
+      const distance = this.getPinchDistance(event.touches);
+      if (distance > 0) {
+        this.touchState = {
+          type: 'pinch',
+          startDistance: distance,
+          startZoom: this.currentZoom
+        };
+      }
+      return;
+    }
+    if (event.touches.length === 1 && this.isZoomedIn()) {
+      const touch = event.touches[0];
+      const target = this.ensureScrollTarget();
+      this.touchState = {
+        type: 'pan',
+        lastX: touch.clientX
+      };
+      if (target) {
+        target.style.cursor = 'grabbing';
+      }
+      event.preventDefault();
+      return;
+    }
+    this.touchState = null;
+  }
+  handleTouchMove(event) {
+    if (!this.touchState || !this.wavesurfer) {
+      return;
+    }
+    if (this.touchState.type === 'pinch') {
+      if (event.touches.length !== 2) {
+        return;
+      }
+      event.preventDefault();
+      const distance = this.getPinchDistance(event.touches);
+      if (distance <= 0 || this.touchState.startDistance <= 0) {
+        return;
+      }
+      const ratio = distance / this.touchState.startDistance;
+      const newZoom = this.touchState.startZoom * ratio;
+      this.applyZoom(newZoom);
+      return;
+    }
+    if (this.touchState.type === 'pan') {
+      if (event.touches.length !== 1) {
+        return;
+      }
+      event.preventDefault();
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - this.touchState.lastX;
+      this.touchState.lastX = touch.clientX;
+      const target = this.ensureScrollTarget();
+      if (target) {
+        target.scrollLeft -= deltaX;
+      }
+    }
+  }
+  handleTouchEnd(event) {
+    if (!this.touchState) {
+      return;
+    }
+    if (event.touches.length === 0) {
+      this.touchState = null;
+      const target = this.ensureScrollTarget();
+      if (target) {
+        target.style.cursor = this.isZoomedIn() ? 'grab' : '';
+      }
+      return;
+    }
+    if (this.touchState.type === 'pinch') {
+      if (event.touches.length === 1 && this.isZoomedIn()) {
+        const touch = event.touches[0];
+        this.touchState = {
+          type: 'pan',
+          lastX: touch.clientX
+        };
+        const target = this.ensureScrollTarget();
+        if (target) {
+          target.style.cursor = 'grabbing';
+        }
+      } else if (event.touches.length < 2) {
+        this.touchState = null;
+        const target = this.ensureScrollTarget();
+        if (target) {
+          target.style.cursor = this.isZoomedIn() ? 'grab' : '';
+        }
+      }
+      return;
+    }
+    if (this.touchState.type === 'pan' && event.touches.length !== 1) {
+      this.touchState = null;
+      const target = this.ensureScrollTarget();
+      if (target) {
+        target.style.cursor = this.isZoomedIn() ? 'grab' : '';
+      }
+    }
   }
   setAbRegionUpdateHandler(handler) {
     this.abRegionUpdateListener = handler;
