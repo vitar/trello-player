@@ -95,13 +95,16 @@ class WaveformPreview extends HTMLElement {
     this.regionsPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
-    const plugins = [];
-    if (WaveSurfer?.Regions?.create) {
-      this.regionsPlugin = WaveSurfer.Regions.create({
+    const regionsPluginFactory = (typeof window !== 'undefined' && window.RegionsPlugin)
+      ? window.RegionsPlugin
+      : (typeof RegionsPlugin !== 'undefined' ? RegionsPlugin : null);
+    const canUseRegionsPlugin =
+      regionsPluginFactory && typeof regionsPluginFactory.create === 'function';
+    const regionsPlugin = canUseRegionsPlugin
+      ? regionsPluginFactory.create({
         dragSelection: false
-      });
-      plugins.push(this.regionsPlugin);
-    }
+      })
+      : null;
     const mergedOptions = {
       container: this.canvas,
       height: 80,
@@ -110,8 +113,15 @@ class WaveformPreview extends HTMLElement {
       ...options
     };
     const optionPlugins = Array.isArray(mergedOptions.plugins) ? mergedOptions.plugins : [];
-    if (plugins.length > 0 || optionPlugins.length > 0) {
-      mergedOptions.plugins = [...optionPlugins, ...plugins];
+    const mergedPlugins = optionPlugins.length > 0 ? [...optionPlugins] : [];
+    if (regionsPlugin) {
+      mergedPlugins.push(regionsPlugin);
+      this.regionsPlugin = regionsPlugin;
+    }
+    if (mergedPlugins.length > 0) {
+      mergedOptions.plugins = mergedPlugins;
+    } else if (Object.prototype.hasOwnProperty.call(mergedOptions, 'plugins')) {
+      delete mergedOptions.plugins;
     }
     this.wavesurfer = WaveSurfer.create(mergedOptions);
     this.wavesurfer.on('destroy', () => {
