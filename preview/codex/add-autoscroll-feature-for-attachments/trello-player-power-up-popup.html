@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Audio Player for Trello Power-Up Popup</title>
+    <link rel="stylesheet" href="./trello-player.css?25">
+  </head>
+  <body>
+    <div id="auth-form" class="hidden">
+      <label>API Key <input id="apikey-input" type="text"></label>
+      <button id="authorize-button" type="button">Authorize</button>
+    </div>
+    <div id="attachments-container" class="hidden">
+      <waveform-preview id="waveform-view"></waveform-preview>
+      <div class="player-controls">
+        <button class="circle-btn" id="prev-button" title="Previous">&#x23EE;&#xFE0E;</button> <!-- ⏮ &#x23EE; -->
+        <button class="circle-btn" id="play-pause-button" title="Play">&#x25B6;&#xFE0E;</button> <!-- ▶ / ⏸ -->
+        <button class="circle-btn" id="ab-button" title="Set A|B repeat points">A|B</button>
+        <button class="circle-btn" id="stop-button" title="Stop">&#x23F9;&#xFE0E;</button> <!-- ⏹ &#x23F9; -->
+        <button class="circle-btn" id="next-button" title="Next">&#x23ED;&#xFE0E;</button> <!-- ⏭ &#x23ED; -->
+      </div>
+      <audio id="audio-player"></audio>
+      <ol id="attachments-list" class="attachments"></ol>
+    </div>
+
+    <template id="waveform-template">
+      <button class="wrench floating" id="settings-button" title="Settings">&#x26ED;</button> <!-- ⛭ &#x26ED; -->
+      <div class="waveform-placeholder hidden" role="status" aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <span class="sr-only">Loading waveform…</span>
+      </div>
+      <div class="waveform-status hidden" role="status" aria-live="polite"></div>
+      <div class="waveform-canvas"></div>
+    </template>
+
+    <template id="attachment-template">
+      <li><span class="attachment-name"></span></li>
+    </template>
+
+
+    <div id="waveform-modal" class="hidden" tabindex="0">
+      <div class="modal-content">
+        <div class="modal-section">
+          <h2>Audio processing</h2>
+          <div class="pitch-controls">
+            <label for="pitch-slider">Semitone pitch shift: <span id="pitch-display">0</span></label>
+            <div class="pitch-slider-row">
+              <span class="pitch-limit">-7</span>
+              <input type="range" id="pitch-slider" min="-7" max="7" step="1" value="0">
+              <span class="pitch-limit">+7</span>
+            </div>
+            <label for="speed-slider">Playback speed: <span id="speed-display">1.00x</span></label>
+            <input type="range" id="speed-slider" min="0.50" max="1.00" step="0.05" value="1.00">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="cancel-waveform">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="./trello-player-config.js?1"></script>
+    <script src="./trello-player-power-up-popup.js?55"></script>
+  </body>
+</html>
