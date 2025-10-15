@@ -83,9 +83,12 @@ function scrollActiveAttachmentIntoView({ direction = null } = {}) {
   if (containerHeight <= 0) {
     return;
   }
+
+  const containerRect = attachmentsList.getBoundingClientRect();
+  const itemRect = activeItem.getBoundingClientRect();
   const scrollTop = attachmentsList.scrollTop;
+  const itemTop = scrollTop + itemRect.top - containerRect.top;
   const containerMiddle = scrollTop + containerHeight / 2;
-  const itemTop = activeItem.offsetTop;
   const itemHeight = activeItem.offsetHeight;
   const itemBottom = itemTop + itemHeight;
   const itemCenter = itemTop + itemHeight / 2;
@@ -106,7 +109,7 @@ function scrollActiveAttachmentIntoView({ direction = null } = {}) {
   }
 
   const target = clampScrollTarget(attachmentsList, itemCenter - containerHeight / 2);
-  attachmentsList.scrollTop = target;
+  attachmentsList.scrollTo({ top: target, behavior: 'smooth' });
 }
 
 function isValidToken(token) {
