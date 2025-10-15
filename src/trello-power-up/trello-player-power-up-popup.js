@@ -95,9 +95,13 @@ class WaveformPreview extends HTMLElement {
     this.regionsPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
-    const canUseRegionsPlugin = typeof WaveSurfer?.RegionsPlugin?.create === 'function';
+    const regionsPluginFactory = (typeof window !== 'undefined' && window.RegionsPlugin)
+      ? window.RegionsPlugin
+      : (typeof RegionsPlugin !== 'undefined' ? RegionsPlugin : null);
+    const canUseRegionsPlugin =
+      regionsPluginFactory && typeof regionsPluginFactory.create === 'function';
     const regionsPlugin = canUseRegionsPlugin
-      ? WaveSurfer.RegionsPlugin.create({
+      ? regionsPluginFactory.create({
         dragSelection: false
       })
       : null;
