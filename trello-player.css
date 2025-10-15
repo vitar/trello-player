@@ -16,6 +16,8 @@ body {
     --spinner-accent: var(--link-color);
     --waveform-overlay-bg: rgba(0, 0, 0, 0.5);
     --waveform-overlay-text: var(--text-color);
+    --waveform-region-color: rgba(110, 170, 255, 0.3);
+    --waveform-region-handle-color: rgba(150, 190, 255, 0.75);
   }
   body {
     background-color: var(--bg-color);
@@ -40,6 +42,8 @@ body {
     --spinner-accent: var(--link-color);
     --waveform-overlay-bg: rgba(255, 255, 255, 0.85);
     --waveform-overlay-text: var(--text-color);
+    --waveform-region-color: rgba(80, 130, 200, 0.3);
+    --waveform-region-handle-color: rgba(80, 130, 200, 0.85);
   }
   body {
     background-color: var(--bg-color);
@@ -95,6 +99,15 @@ audio {
   cursor: pointer;
   transition: background-color 0.3s, color 0.3s, transform 0.1s;
 }
+.circle-btn.active {
+  background-color: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+}
+.circle-btn.pending {
+  background-color: var(--btn-bg);
+  background-color: color-mix(in srgb, var(--btn-hover-bg) 40%, transparent);
+  color: var(--btn-color);
+}
 @media (hover: hover) and (pointer: fine) {
   .circle-btn:hover {
     background-color: var(--btn-hover-bg);
@@ -144,6 +157,14 @@ audio {
   width: 100%;
   min-height: 80px;
   position: relative;
+}
+.waveform-canvas .ws-region {
+  background-color: var(--waveform-region-color) !important;
+  border: 1px solid var(--waveform-region-color);
+  border-color: color-mix(in srgb, var(--waveform-region-color) 80%, transparent);
+}
+.waveform-canvas .ws-region-handle {
+  background-color: var(--waveform-region-handle-color) !important;
 }
 .wrench {
   font-family: "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif;
