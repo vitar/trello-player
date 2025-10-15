@@ -95,12 +95,7 @@ class WaveformPreview extends HTMLElement {
     this.regionsPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
-    const canUseRegionsPlugin = typeof WaveSurfer?.RegionsPlugin?.create === 'function';
-    const regionsPlugin = canUseRegionsPlugin
-      ? WaveSurfer.RegionsPlugin.create({
-        dragSelection: false
-      })
-      : null;
+    const shouldLoadRegions = Boolean(WaveSurfer?.RegionsPlugin?.create);
     const mergedOptions = {
       container: this.canvas,
       height: 80,
@@ -109,20 +104,20 @@ class WaveformPreview extends HTMLElement {
       ...options
     };
     const optionPlugins = Array.isArray(mergedOptions.plugins) ? mergedOptions.plugins : [];
-    const mergedPlugins = optionPlugins.length > 0 ? [...optionPlugins] : [];
-    if (regionsPlugin) {
-      mergedPlugins.push(regionsPlugin);
-      this.regionsPlugin = regionsPlugin;
-    }
-    if (mergedPlugins.length > 0) {
-      mergedOptions.plugins = mergedPlugins;
-    } else if (Object.prototype.hasOwnProperty.call(mergedOptions, 'plugins')) {
-      delete mergedOptions.plugins;
+    if (optionPlugins.length > 0) {
+      mergedOptions.plugins = [...optionPlugins];
     }
     this.wavesurfer = WaveSurfer.create(mergedOptions);
     this.wavesurfer.on('destroy', () => {
       abortController.abort();
     });
+    if (shouldLoadRegions && this.wavesurfer?.registerPlugin) {
+      this.regionsPlugin = this.wavesurfer.registerPlugin(
+        WaveSurfer.RegionsPlugin.create({
+          dragSelection: false
+        })
+      );
+    }
     if (this.regionsPlugin) {
       this.regionsPlugin.on('region-updated', (region) => {
         if (this.abLoopRegion && region && region.id === this.abLoopRegion.id) {
