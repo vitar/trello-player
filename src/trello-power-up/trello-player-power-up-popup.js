@@ -66,6 +66,49 @@ let abPointB = null;
 let abRepeatActive = false;
 let isClearingAbRegion = false;
 
+function clampScrollTarget(container, target) {
+  const maxScroll = Math.max(container.scrollHeight - container.clientHeight, 0);
+  return Math.max(0, Math.min(target, maxScroll));
+}
+
+function scrollActiveAttachmentIntoView({ direction = null } = {}) {
+  if (!attachmentsList) {
+    return;
+  }
+  const activeItem = attachmentsList.querySelector('li.active');
+  if (!activeItem) {
+    return;
+  }
+  const containerHeight = attachmentsList.clientHeight;
+  if (containerHeight <= 0) {
+    return;
+  }
+  const scrollTop = attachmentsList.scrollTop;
+  const containerMiddle = scrollTop + containerHeight / 2;
+  const itemTop = activeItem.offsetTop;
+  const itemHeight = activeItem.offsetHeight;
+  const itemBottom = itemTop + itemHeight;
+  const itemCenter = itemTop + itemHeight / 2;
+  const isBelowView = itemBottom > scrollTop + containerHeight;
+  const isAboveView = itemTop < scrollTop;
+  let shouldAdjust = false;
+
+  if (direction === 'forward') {
+    shouldAdjust = itemCenter > containerMiddle;
+  } else if (direction === 'backward') {
+    shouldAdjust = itemCenter < containerMiddle;
+  } else {
+    shouldAdjust = isBelowView || isAboveView;
+  }
+
+  if (!shouldAdjust) {
+    return;
+  }
+
+  const target = clampScrollTarget(attachmentsList, itemCenter - containerHeight / 2);
+  attachmentsList.scrollTop = target;
+}
+
 function isValidToken(token) {
   const isString = typeof token === 'string';
   const isTest = /^[a-zA-Z0-9]{64,80}$/i.test(token);
@@ -839,11 +882,12 @@ async function loadPlayer(token, key) {
   }
 }
 
-async function loadAttachment(index) {
+async function loadAttachment(index, options = {}) {
   if (index < 0 || index >= m4aAttachments.length) {
     return;
   }
 
+  const { autoplay = true, scrollToTop = false } = options;
   const previousIndex = currentAttachmentIndex;
   const previousSpeed = desiredPlaybackSpeed;
   resetAbLoop();
@@ -853,9 +897,16 @@ async function loadAttachment(index) {
   const attachment = m4aAttachments[index];
 
   const attachmentsListItems = document.querySelectorAll('#attachments-list li');
+  const direction = index > previousIndex ? 'forward' : index < previousIndex ? 'backward' : null;
   attachmentsListItems.forEach((item, idx) => {
     item.classList.toggle('active', idx === index);
   });
+
+  if (scrollToTop && attachmentsList) {
+    attachmentsList.scrollTop = 0;
+  } else {
+    scrollActiveAttachmentIntoView({ direction });
+  }
 
   setPitchControlsEnabled(false);
   setPlaybackSpeedControlsEnabled(false);
@@ -886,12 +937,18 @@ async function loadAttachment(index) {
     await applyPlaybackSpeed(1);
     setPlaybackSpeedControlsEnabled(true);
     prefetchAdjacent(index);
-    const playPromise = audioPlayer.play();
-    if (playPromise !== undefined) {
-      playPromise.catch((error) => {
-        console.warn('Playback start was blocked:', error);
-        waveformView.showStatus('Press play or choose a track to start playback.');
-      });
+    if (autoplay) {
+      const playPromise = audioPlayer.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.warn('Playback start was blocked:', error);
+          waveformView.showStatus('Press play or choose a track to start playback.');
+        });
+      }
+    } else {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      updatePlayPauseButton();
     }
   } catch (error) {
     if (audioUrl && audioUrl !== currentObjectUrl) {
@@ -994,7 +1051,9 @@ audioPlayer.addEventListener('ended', () => {
     return;
   }
   if (currentAttachmentIndex < m4aAttachments.length - 1) {
-    loadAttachment(currentAttachmentIndex + 1);
+    loadAttachment(currentAttachmentIndex + 1, { autoplay: true });
+  } else if (m4aAttachments.length > 0) {
+    loadAttachment(0, { autoplay: false, scrollToTop: true });
   }
 });
 
