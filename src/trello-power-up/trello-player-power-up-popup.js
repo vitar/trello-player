@@ -154,17 +154,17 @@ class WaveformPreview extends HTMLElement {
     this.zoomPlugin = null;
     this.scrollTarget = null;
     this.currentZoom = 1;
-    this.minZoom = 1;
-    this.maxZoom = 16;
+    this.minZoom = 0.5;
+    this.maxZoom = 100;
     this.touchState = null;
     this.handleTouchStart = this.handleTouchStart.bind(this);
     this.handleTouchMove = this.handleTouchMove.bind(this);
     this.handleTouchEnd = this.handleTouchEnd.bind(this);
     if (this.canvas) {
-      this.canvas.addEventListener('touchstart', this.handleTouchStart, { passive: false });
-      this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
-      this.canvas.addEventListener('touchend', this.handleTouchEnd, { passive: true });
-      this.canvas.addEventListener('touchcancel', this.handleTouchEnd, { passive: true });
+      //this.canvas.addEventListener('touchstart', this.handleTouchStart, { passive: false });
+      //this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+      //this.canvas.addEventListener('touchend', this.handleTouchEnd, { passive: true });
+      //this.canvas.addEventListener('touchcancel', this.handleTouchEnd, { passive: true });
     }
   }
   createPlayer(options = {}) {
@@ -212,8 +212,8 @@ class WaveformPreview extends HTMLElement {
       abortController.abort();
     });
     this.wavesurfer.once('ready', () => {
-      this.resetZoom();
-      this.ensureScrollTarget();
+      //this.resetZoom();
+      //this.ensureScrollTarget();
     });
     if (this.regionsPlugin) {
       this.regionsPlugin.on('region-updated', (region) => {
