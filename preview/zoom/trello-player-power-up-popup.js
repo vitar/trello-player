@@ -831,7 +831,7 @@ async function applyPlaybackSpeed(value) {
 }
 
 function applyZoom(value) {
-
+  waveformView.zoom(value);
 }
 
 async function loadPlayer(token, key) {
