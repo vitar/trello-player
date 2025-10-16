@@ -38,6 +38,7 @@ let pitchSlider = document.getElementById('pitch-slider');
 let pitchDisplay = document.getElementById('pitch-display');
 let speedSlider = document.getElementById('speed-slider');
 let speedDisplay = document.getElementById('speed-display');
+let zoomSlider = document.getElementById('zoom-slider');
 let trelloToken;
 let apiKey;
 let popup;
@@ -180,6 +181,13 @@ class WaveformPreview extends HTMLElement {
       mergedOptions.plugins = [...optionPlugins, ...plugins];
     }
     this.wavesurfer = WaveSurfer.create(mergedOptions);
+    wavesurfer.once('decode', () => {
+      const slider = document.querySelector('input[type="range"]')
+      slider.addEventListener('input', (e) => {
+        const minPxPerSec = e.target.valueAsNumber
+        wavesurfer.zoom(minPxPerSec)
+      })
+    })
     this.wavesurfer.on('destroy', () => {
       abortController.abort();
     });
@@ -314,6 +322,9 @@ class WaveformPreview extends HTMLElement {
       this.abLoopRegion.remove();
       this.abLoopRegion = null;
     }
+  }
+  zoom(value) {
+    this.wavesurfer.zoom(value);
   }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
@@ -826,6 +837,10 @@ async function applyPlaybackSpeed(value) {
   return clamped;
 }
 
+function applyZoom(value) {
+
+}
+
 async function loadPlayer(token, key) {
   try {
     audioBlobCache.clear();
@@ -1132,6 +1147,17 @@ if (speedSlider) {
   });
   updatePlaybackSpeedUI(desiredPlaybackSpeed);
   setPlaybackSpeedControlsEnabled(false);
+}
+
+if (zoomSlider) {
+  zoomSlider.addEventListener('input', (event) => {
+    const value = Number(event.target.value);
+    applyZoom(value);
+  });
+  zoomSlider.addEventListener('change', (event) => {
+    const value = Number(event.target.value);
+    applyZoom(value);
+  });
 }
 
 authorizeBtn.addEventListener('click', async () => {
