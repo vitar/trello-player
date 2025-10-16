@@ -181,13 +181,6 @@ class WaveformPreview extends HTMLElement {
       mergedOptions.plugins = [...optionPlugins, ...plugins];
     }
     this.wavesurfer = WaveSurfer.create(mergedOptions);
-    wavesurfer.once('decode', () => {
-      const slider = document.querySelector('input[type="range"]')
-      slider.addEventListener('input', (e) => {
-        const minPxPerSec = e.target.valueAsNumber
-        wavesurfer.zoom(minPxPerSec)
-      })
-    })
     this.wavesurfer.on('destroy', () => {
       abortController.abort();
     });
