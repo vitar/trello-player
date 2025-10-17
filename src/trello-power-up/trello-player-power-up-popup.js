@@ -160,6 +160,7 @@ class WaveformPreview extends HTMLElement {
     this.canvas.innerHTML = '';
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
     const plugins = [];
@@ -169,10 +170,21 @@ class WaveformPreview extends HTMLElement {
       });
       plugins.push(this.regionsPlugin);
     }
+    if (WaveSurfer?.Zoom?.create) {
+      this.zoomPlugin = WaveSurfer.Regions.create({
+        // the amount of zoom per wheel step, e.g. 0.5 means a 50% magnification per scroll
+        scale: 0.5,
+        minZoom: 1,
+        // Optionally, specify the maximum pixels-per-second factor while zooming
+        maxZoom: 100
+      });
+      plugins.push(this.zoomPlugin);
+    }
     const mergedOptions = {
       container: this.canvas,
       height: 80,
       normalize: true,
+      minPxPerSec: 1,
       fetchParams: { signal },
       ...options
     };
