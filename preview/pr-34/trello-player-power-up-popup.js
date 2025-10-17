@@ -155,7 +155,7 @@ class WaveformPreview extends HTMLElement {
     this.scrollTarget = null;
     this.currentZoom = 1;
     this.minZoom = 1;
-    this.maxZoom = 16;
+    this.maxZoom = 100;
     this.touchState = null;
     this.handleTouchStart = this.handleTouchStart.bind(this);
     this.handleTouchMove = this.handleTouchMove.bind(this);
