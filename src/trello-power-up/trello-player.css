@@ -155,6 +155,7 @@ audio {
 }
 .waveform-canvas {
   width: 100%;
+  contain: inline-size;
   min-height: 80px;
   position: relative;
 }
