@@ -155,10 +155,8 @@ audio {
 }
 .waveform-canvas {
   width: 100%;
-  overflow: hidden;
-  contain: size layout;
+  contain: inline-size;
   min-height: 80px;
-  contain-intrinsic-size: auto 80px;
   position: relative;
 }
 .waveform-canvas .ws-region {
