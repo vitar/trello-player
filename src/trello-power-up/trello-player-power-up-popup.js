@@ -38,7 +38,6 @@ let pitchSlider = document.getElementById('pitch-slider');
 let pitchDisplay = document.getElementById('pitch-display');
 let speedSlider = document.getElementById('speed-slider');
 let speedDisplay = document.getElementById('speed-display');
-let zoomSlider = document.getElementById('zoom-slider');
 let trelloToken;
 let apiKey;
 let popup;
@@ -138,6 +137,7 @@ async function validateToken(key, token) {
     return false;
   }
 }
+
 class WaveformPreview extends HTMLElement {
   constructor() {
     super();
@@ -172,9 +172,7 @@ class WaveformPreview extends HTMLElement {
     }
     if (WaveSurfer?.Zoom?.create) {
       this.zoomPlugin = WaveSurfer.Zoom.create({
-        // the amount of zoom per wheel step, e.g. 0.5 means a 50% magnification per scroll
         scale: 0.5,
-        // Optionally, specify the maximum pixels-per-second factor while zooming
         maxZoom: 100
       });
       plugins.push(this.zoomPlugin);
@@ -246,6 +244,7 @@ class WaveformPreview extends HTMLElement {
     }
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
     this.canvas.innerHTML = '';
     this.hideLoading();
     this.hideStatus();
@@ -326,9 +325,6 @@ class WaveformPreview extends HTMLElement {
       this.abLoopRegion.remove();
       this.abLoopRegion = null;
     }
-  }
-  zoom(value) {
-    this.wavesurfer.zoom(value);
   }
   exportPeaks() {
     return this.wavesurfer.exportPeaks({channels:1,maxLength:600,precision:1000});
@@ -841,10 +837,6 @@ async function applyPlaybackSpeed(value) {
   return clamped;
 }
 
-function applyZoom(value) {
-  waveformView.zoom(value);
-}
-
 async function loadPlayer(token, key) {
   try {
     audioBlobCache.clear();
@@ -1151,17 +1143,6 @@ if (speedSlider) {
   });
   updatePlaybackSpeedUI(desiredPlaybackSpeed);
   setPlaybackSpeedControlsEnabled(false);
-}
-
-if (zoomSlider) {
-  zoomSlider.addEventListener('input', (event) => {
-    const value = Number(event.target.value);
-    applyZoom(value);
-  });
-  zoomSlider.addEventListener('change', (event) => {
-    const value = Number(event.target.value);
-    applyZoom(value);
-  });
 }
 
 authorizeBtn.addEventListener('click', async () => {
