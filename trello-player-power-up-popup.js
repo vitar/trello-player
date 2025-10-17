@@ -137,6 +137,7 @@ async function validateToken(key, token) {
     return false;
   }
 }
+
 class WaveformPreview extends HTMLElement {
   constructor() {
     super();
@@ -159,6 +160,7 @@ class WaveformPreview extends HTMLElement {
     this.canvas.innerHTML = '';
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
     const abortController = new AbortController();
     const signal = abortController.signal;
     const plugins = [];
@@ -168,10 +170,19 @@ class WaveformPreview extends HTMLElement {
       });
       plugins.push(this.regionsPlugin);
     }
+    if (WaveSurfer?.Zoom?.create) {
+      this.zoomPlugin = WaveSurfer.Zoom.create({
+        scale: 0.5,
+        maxZoom: 100,
+        exponentialZooming: true
+      });
+      plugins.push(this.zoomPlugin);
+    }
     const mergedOptions = {
       container: this.canvas,
       height: 80,
       normalize: true,
+      minPxPerSec: 1,
       fetchParams: { signal },
       ...options
     };
@@ -234,6 +245,7 @@ class WaveformPreview extends HTMLElement {
     }
     this.abLoopRegion = null;
     this.regionsPlugin = null;
+    this.zoomPlugin = null;
     this.canvas.innerHTML = '';
     this.hideLoading();
     this.hideStatus();
