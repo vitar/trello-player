@@ -172,7 +172,7 @@ class WaveformPreview extends HTMLElement {
     }
     if (WaveSurfer?.Zoom?.create) {
       this.zoomPlugin = WaveSurfer.Zoom.create({
-        scale: 0.5,
+        scale: 0.1,
         maxZoom: 100
       });
       plugins.push(this.zoomPlugin);
