@@ -171,10 +171,9 @@ class WaveformPreview extends HTMLElement {
       plugins.push(this.regionsPlugin);
     }
     if (WaveSurfer?.Zoom?.create) {
-      this.zoomPlugin = WaveSurfer.Regions.create({
+      this.zoomPlugin = WaveSurfer.Zoom.create({
         // the amount of zoom per wheel step, e.g. 0.5 means a 50% magnification per scroll
         scale: 0.5,
-        minZoom: 1,
         // Optionally, specify the maximum pixels-per-second factor while zooming
         maxZoom: 100
       });
