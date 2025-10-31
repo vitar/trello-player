@@ -1,0 +1,22 @@
+export const dom = {
+  audioPlayer: document.getElementById('audio-player'),
+  attachmentsList: document.getElementById('attachments-list'),
+  waveformView: document.getElementById('waveform-view'),
+  waveformTemplate: document.getElementById('waveform-template'),
+  attachmentTemplate: document.getElementById('attachment-template'),
+  playPauseButton: document.getElementById('play-pause-button'),
+  abButton: document.getElementById('ab-button'),
+  modal: document.getElementById('waveform-modal'),
+  cancelBtn: document.getElementById('cancel-waveform'),
+  authorizeBtn: document.getElementById('authorize-button'),
+  attachmentsContainer: document.getElementById('attachments-container'),
+  authForm: document.getElementById('auth-form'),
+  apiKeyInput: document.getElementById('apikey-input'),
+  pitchSlider: document.getElementById('pitch-slider'),
+  pitchDisplay: document.getElementById('pitch-display'),
+  speedSlider: document.getElementById('speed-slider'),
+  speedDisplay: document.getElementById('speed-display'),
+  prevButton: document.getElementById('prev-button'),
+  nextButton: document.getElementById('next-button'),
+  stopButton: document.getElementById('stop-button')
+};
