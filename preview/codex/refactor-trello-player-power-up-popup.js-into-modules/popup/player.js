@@ -1,9 +1,7 @@
 import { dom } from './dom.js';
 import { state, caches } from './state.js';
-import { t } from './trello.js';
 import {
   applyPitchValue,
-  getPitchStorageKey,
   setPitchControlsEnabled,
   updatePitchUI
 } from './pitch.js';
@@ -32,6 +30,8 @@ import {
   updateSoundtouchPitch,
   updateSoundtouchTempo
 } from './soundtouch.js';
+import { loadPitchPreference } from './storage.js';
+import { fetchSongAttachments } from './song-source.js';
 
 function updatePlayPauseButton() {
   if (!dom.playPauseButton) return;
@@ -132,7 +132,7 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
     dom.audioPlayer.dataset.loadToken = String(loadToken);
     showWaveform(audioUrl);
     abLoop.setAbButtonEnabled(true);
-    const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
+    const storedPitch = await loadPitchPreference(attachment);
     const pitchValue = Number(storedPitch);
     await applyPitchValue(Number.isFinite(pitchValue) ? pitchValue : 0);
     setPitchControlsEnabled(true);
@@ -187,24 +187,15 @@ async function loadPlayer(abLoop) {
     setPlaybackSpeedControlsEnabled(false);
     state.desiredPlaybackSpeed = 1;
     updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
-    const listInfo = await t.list('id');
-    const response = await fetch(
-      `https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${state.apiKey}&token=${state.trelloToken}`
-    );
-    const cards = await response.json();
-    cards.forEach((card) => {
-      const cardM4aAttachments = card.attachments.filter((attachment) =>
-        attachment.url.endsWith('.m4a') || attachment.url.endsWith('.mp3')
-      );
-      cardM4aAttachments.forEach((attachment) => {
-        state.m4aAttachments.push({ ...attachment, cardId: card.id });
-        const element = createAttachmentListItem(attachment, (id) => {
-          const targetIndex = state.m4aAttachments.findIndex((att) => att.id === id);
-          loadAttachment(targetIndex, {}, abLoop);
-        });
-        appendAttachmentListItem(element);
-        updateAttachmentDurationDisplay(attachment.id);
+    const attachments = await fetchSongAttachments({ apiKey: state.apiKey, token: state.trelloToken });
+    state.m4aAttachments.push(...attachments);
+    state.m4aAttachments.forEach((attachment) => {
+      const element = createAttachmentListItem(attachment, (id) => {
+        const targetIndex = state.m4aAttachments.findIndex((att) => att.id === id);
+        loadAttachment(targetIndex, {}, abLoop);
       });
+      appendAttachmentListItem(element);
+      updateAttachmentDurationDisplay(attachment.id);
     });
 
     if (state.m4aAttachments.length > 0) {
