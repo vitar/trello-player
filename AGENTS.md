@@ -12,11 +12,7 @@ These instructions apply to the entire repository and describe non-functional co
 - Support both light and dark themes by using CSS variables and the `prefers-color-scheme` media query. New styles should work in both themes.
 
 ## Coding Standards
-- Use plain ES6 JavaScript without build tools or frameworks.
-- Indent using two spaces and include semicolons.
-- Keep CSS simple and readable.
+- Use plain ES6 JavaScript without frameworks.
 
 ## Trello Attachment Access
-- Trello blocks cross-origin requests to attachments, so Power-Up scripts cannot fetch them directly. Features that require attachment data must rely on the user downloading the file or using the Power-Up API.
-
 Currently there are no automated tests, so verify changes manually and run basic sanity checks such as `git status` and `git log -1 --stat` before committing.
