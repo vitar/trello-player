@@ -284,6 +284,7 @@ const state = {
   currentLoadRequest: 0,
   desiredPitchSemitones: 0,
   desiredPlaybackSpeed: 1,
+  isAudioLoaded: false,
   abPointA: null,
   abPointB: null,
   abRepeatActive: false,
@@ -997,6 +998,12 @@ function updatePlayPauseButton() {
   }
 }
 
+function updateSettingsControlsAvailability() {
+  const audioReady = state.isAudioLoaded;
+  setPitchControlsEnabled(audioReady);
+  setPlaybackSpeedControlsEnabled(audioReady);
+}
+
 function showWaveform(audioUrl) {
   if (!dom.waveformView) return;
   dom.waveformView.clear();
@@ -1045,11 +1052,14 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
 
   const previousIndex = state.currentAttachmentIndex;
   const previousSpeed = state.desiredPlaybackSpeed;
+  const previousAudioLoaded = state.isAudioLoaded;
   abLoop.resetAbLoop();
   abLoop.setAbButtonEnabled(false);
   state.currentAttachmentIndex = index;
   const loadToken = ++state.currentLoadRequest;
   const attachment = state.m4aAttachments[index];
+  state.isAudioLoaded = false;
+  updateSettingsControlsAvailability();
 
   const listItems = dom.attachmentsList?.querySelectorAll('li') ?? [];
   const direction = index > previousIndex ? 'forward' : index < previousIndex ? 'backward' : null;
@@ -1063,8 +1073,6 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
     scrollActiveAttachmentIntoView(dom.attachmentsList, { direction });
   }
 
-  setPitchControlsEnabled(false);
-  setPlaybackSpeedControlsEnabled(false);
   dom.waveformView?.hideStatus();
   dom.waveformView?.showLoading();
   let audioBlob;
@@ -1088,9 +1096,9 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
     const storedPitch = await loadPitchPreference(attachment);
     const pitchValue = Number(storedPitch);
     await applyPitchValue(Number.isFinite(pitchValue) ? pitchValue : 0);
-    setPitchControlsEnabled(true);
     await applyPlaybackSpeed(1);
-    setPlaybackSpeedControlsEnabled(true);
+    state.isAudioLoaded = true;
+    updateSettingsControlsAvailability();
     prefetchAdjacent(index);
     if (autoplay) {
       const playPromise = dom.audioPlayer.play();
@@ -1118,8 +1126,8 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
     state.desiredPlaybackSpeed = previousSpeed;
     updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
     updateSoundtouchTempo(state.desiredPlaybackSpeed);
-    setPlaybackSpeedControlsEnabled(state.m4aAttachments.length > 0);
-    setPitchControlsEnabled(state.m4aAttachments.length > 0);
+    state.isAudioLoaded = previousAudioLoaded;
+    updateSettingsControlsAvailability();
     updatePitchUI(state.desiredPitchSemitones);
     if (loadToken === state.currentLoadRequest) {
       dom.waveformView?.hideLoading();
@@ -1136,12 +1144,14 @@ async function loadPlayer(abLoop) {
     caches.attachmentDurations.clear();
     abLoop.resetAbLoop();
     abLoop.setAbButtonEnabled(false);
-    setPitchControlsEnabled(false);
-    setPlaybackSpeedControlsEnabled(false);
+    state.isAudioLoaded = false;
+    updateSettingsControlsAvailability();
     state.desiredPlaybackSpeed = 1;
     updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
     const attachments = await fetchSongAttachments({ apiKey: state.apiKey, token: state.trelloToken });
     state.m4aAttachments.push(...attachments);
+    state.isAudioLoaded = false;
+    updateSettingsControlsAvailability();
     state.m4aAttachments.forEach((attachment) => {
       const element = createAttachmentListItem(attachment, (id) => {
         const targetIndex = state.m4aAttachments.findIndex((att) => att.id === id);
@@ -1162,7 +1172,8 @@ async function loadPlayer(abLoop) {
       updatePitchUI(0);
       state.desiredPlaybackSpeed = 1;
       updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
-      setPlaybackSpeedControlsEnabled(false);
+      state.isAudioLoaded = false;
+      updateSettingsControlsAvailability();
       abLoop.resetAbLoop();
       abLoop.setAbButtonEnabled(false);
     }
@@ -1171,6 +1182,8 @@ async function loadPlayer(abLoop) {
     alert('Failed to load attachments. Please try again.');
     abLoop.resetAbLoop();
     abLoop.setAbButtonEnabled(false);
+    state.isAudioLoaded = false;
+    updateSettingsControlsAvailability();
   }
 }
 
@@ -1179,8 +1192,8 @@ function createPlayerController(abLoop) {
     updatePlayPauseButton();
     updatePitchUI(state.desiredPitchSemitones);
     updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
-    setPitchControlsEnabled(false);
-    setPlaybackSpeedControlsEnabled(false);
+    state.isAudioLoaded = false;
+    updateSettingsControlsAvailability();
 
     dom.prevButton?.addEventListener('click', () => {
       if (state.currentAttachmentIndex > 0) {
@@ -1268,6 +1281,20 @@ function createPlayerController(abLoop) {
     dom.audioPlayer.addEventListener('seeked', () => {
       clearSoundtouchBuffers();
       abLoop.enforceAbLoop();
+    });
+
+    dom.audioPlayer.addEventListener('canplay', () => {
+      const loadToken = Number(dom.audioPlayer.dataset.loadToken);
+      if (loadToken !== state.currentLoadRequest) {
+        return;
+      }
+      state.isAudioLoaded = true;
+      updateSettingsControlsAvailability();
+    });
+
+    dom.audioPlayer.addEventListener('emptied', () => {
+      state.isAudioLoaded = false;
+      updateSettingsControlsAvailability();
     });
 
     dom.audioPlayer.addEventListener('loadstart', () => {
