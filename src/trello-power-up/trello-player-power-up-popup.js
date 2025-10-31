@@ -555,9 +555,6 @@ function createAbLoopController() {
   };
 }
 
-// Source: src/trello-power-up/popup/trello.js
-const t = window.TrelloPowerUp.iframe();
-
 // Source: src/trello-power-up/popup/soundtouch.js
 function clearSoundtouchBuffers() {
   if (!state.soundtouchNode || !state.soundtouchNode.port) {
@@ -645,6 +642,62 @@ async function ensureSoundtouchNode() {
   return state.soundtouchNode;
 }
 
+// Source: src/trello-power-up/popup/trello.js
+const t = window.TrelloPowerUp.iframe();
+
+// Source: src/trello-power-up/popup/storage.js
+function buildPitchStorageKey(attachment) {
+  if (!attachment || !attachment.id || !attachment.cardId) {
+    return null;
+  }
+  return `${PITCH_KEY_PREFIX}${attachment.cardId}:${attachment.id}`;
+}
+
+async function loadApiKey() {
+  return await t.get('board', 'shared', 'apikey');
+}
+
+async function saveApiKey(value) {
+  return await t.set('board', 'shared', 'apikey', value);
+}
+
+async function loadMemberToken() {
+  return await t.get('member', 'private', 'token');
+}
+
+async function saveMemberToken(token) {
+  return await t.set('member', 'private', 'token', token);
+}
+
+async function clearMemberToken() {
+  return await t.set('member', 'private', 'token', null);
+}
+
+async function loadPitchPreference(attachment) {
+  const storageKey = buildPitchStorageKey(attachment);
+  if (!storageKey) {
+    return null;
+  }
+  try {
+    return await t.get('board', 'shared', storageKey);
+  } catch (error) {
+    console.warn('Failed to load pitch preference:', error);
+    return null;
+  }
+}
+
+async function savePitchPreference(attachment, value) {
+  const storageKey = buildPitchStorageKey(attachment);
+  if (!storageKey) {
+    return;
+  }
+  try {
+    await t.set('board', 'shared', storageKey, value);
+  } catch (error) {
+    console.error('Failed to save pitch preference:', error);
+  }
+}
+
 // Source: src/trello-power-up/popup/pitch.js
 function clampPitch(value) {
   if (Number.isNaN(value)) return 0;
@@ -663,10 +716,6 @@ function setPitchControlsEnabled(enabled) {
   if (dom.pitchSlider) dom.pitchSlider.disabled = !enabled;
 }
 
-function getPitchStorageKey(attachment) {
-  return `${PITCH_KEY_PREFIX}${attachment.cardId}:${attachment.id}`;
-}
-
 async function applyPitchValue(value, { persist = false } = {}) {
   const clamped = clampPitch(value);
   state.desiredPitchSemitones = clamped;
@@ -681,11 +730,7 @@ async function applyPitchValue(value, { persist = false } = {}) {
   if (persist) {
     const attachment = state.m4aAttachments[state.currentAttachmentIndex];
     if (attachment) {
-      try {
-        await t.set('board', 'shared', getPitchStorageKey(attachment), clamped);
-      } catch (error) {
-        console.error('Failed to save pitch preference:', error);
-      }
+      await savePitchPreference(attachment, clamped);
     }
   }
 }
@@ -914,6 +959,32 @@ function scrollActiveAttachmentIntoView(list, { direction = null } = {}) {
   list.scrollTo({ top: target, behavior: 'smooth' });
 }
 
+// Source: src/trello-power-up/popup/song-source.js
+const SUPPORTED_AUDIO_EXTENSIONS = ['.m4a', '.mp3'];
+
+function isSupportedAttachment(attachment) {
+  return SUPPORTED_AUDIO_EXTENSIONS.some((ext) => attachment.url?.toLowerCase().endsWith(ext));
+}
+
+async function fetchSongAttachments({ apiKey, token }) {
+  const listInfo = await t.list('id');
+  const response = await fetch(
+    `https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${apiKey}&token=${token}`
+  );
+  if (!response.ok) {
+    throw new Error(`Trello responded with status ${response.status}`);
+  }
+  const cards = await response.json();
+  const attachments = [];
+  cards.forEach((card) => {
+    const cardAttachments = card.attachments
+      .filter(isSupportedAttachment)
+      .map((attachment) => ({ ...attachment, cardId: card.id }));
+    attachments.push(...cardAttachments);
+  });
+  return attachments;
+}
+
 // Source: src/trello-power-up/popup/player.js
 function updatePlayPauseButton() {
   if (!dom.playPauseButton) return;
@@ -1014,7 +1085,7 @@ async function loadAttachment(index, { autoplay = true, scrollToTop = false } = 
     dom.audioPlayer.dataset.loadToken = String(loadToken);
     showWaveform(audioUrl);
     abLoop.setAbButtonEnabled(true);
-    const storedPitch = await t.get('board', 'shared', getPitchStorageKey(attachment));
+    const storedPitch = await loadPitchPreference(attachment);
     const pitchValue = Number(storedPitch);
     await applyPitchValue(Number.isFinite(pitchValue) ? pitchValue : 0);
     setPitchControlsEnabled(true);
@@ -1069,24 +1140,15 @@ async function loadPlayer(abLoop) {
     setPlaybackSpeedControlsEnabled(false);
     state.desiredPlaybackSpeed = 1;
     updatePlaybackSpeedUI(state.desiredPlaybackSpeed);
-    const listInfo = await t.list('id');
-    const response = await fetch(
-      `https://api.trello.com/1/lists/${listInfo.id}/cards?attachments=true&key=${state.apiKey}&token=${state.trelloToken}`
-    );
-    const cards = await response.json();
-    cards.forEach((card) => {
-      const cardM4aAttachments = card.attachments.filter((attachment) =>
-        attachment.url.endsWith('.m4a') || attachment.url.endsWith('.mp3')
-      );
-      cardM4aAttachments.forEach((attachment) => {
-        state.m4aAttachments.push({ ...attachment, cardId: card.id });
-        const element = createAttachmentListItem(attachment, (id) => {
-          const targetIndex = state.m4aAttachments.findIndex((att) => att.id === id);
-          loadAttachment(targetIndex, {}, abLoop);
-        });
-        appendAttachmentListItem(element);
-        updateAttachmentDurationDisplay(attachment.id);
+    const attachments = await fetchSongAttachments({ apiKey: state.apiKey, token: state.trelloToken });
+    state.m4aAttachments.push(...attachments);
+    state.m4aAttachments.forEach((attachment) => {
+      const element = createAttachmentListItem(attachment, (id) => {
+        const targetIndex = state.m4aAttachments.findIndex((att) => att.id === id);
+        loadAttachment(targetIndex, {}, abLoop);
       });
+      appendAttachmentListItem(element);
+      updateAttachmentDurationDisplay(attachment.id);
     });
 
     if (state.m4aAttachments.length > 0) {
@@ -1281,7 +1343,7 @@ function setupAuth(player) {
   async function handleAuthorizeClick() {
     const key = dom.apiKeyInput?.value.trim() ?? '';
     state.apiKey = key;
-    await t.set('board', 'shared', 'apikey', key);
+    await saveApiKey(key);
     const returnUrl = window.location.href.split('#')[0];
     const authUrl = () =>
       'https://trello.com/1/authorize?expiration=never' +
@@ -1306,7 +1368,7 @@ function setupAuth(player) {
         state.popup = null;
         return;
       }
-      await t.set('member', 'private', 'token', token);
+      await saveMemberToken(token);
       state.popup?.close();
       state.popup = null;
       location.reload();
@@ -1333,11 +1395,13 @@ function setupAuth(player) {
 
   dom.apiKeyInput?.addEventListener('change', () => {
     state.apiKey = dom.apiKeyInput.value.trim();
-    t.set('board', 'shared', 'apikey', state.apiKey);
+    saveApiKey(state.apiKey).catch((error) => {
+      console.warn('Failed to persist API key change:', error);
+    });
   });
 
   async function initAuth() {
-    const key = await t.get('board', 'shared', 'apikey');
+    const key = await loadApiKey();
     if (key && dom.apiKeyInput) {
       dom.apiKeyInput.value = key;
     }
@@ -1345,18 +1409,18 @@ function setupAuth(player) {
 
     const hashMatch = window.location.hash.match(/token=([^&]+)/);
     if (hashMatch) {
-      await t.set('member', 'private', 'token', hashMatch[1]);
+      await saveMemberToken(hashMatch[1]);
       window.location.hash = '';
     }
 
-    const token = await t.get('member', 'private', 'token');
+    const token = await loadMemberToken();
     if (token && (await validateToken(state.apiKey, token))) {
       hideAuthForm();
       state.trelloToken = token;
       await player.loadPlayer();
     } else {
       if (token) {
-        await t.set('member', 'private', 'token', null);
+        await clearMemberToken();
       }
       showAuthForm();
     }

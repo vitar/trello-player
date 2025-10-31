@@ -1,6 +1,13 @@
 import { dom } from './dom.js';
 import { state } from './state.js';
 import { t } from './trello.js';
+import {
+  clearMemberToken,
+  loadApiKey,
+  loadMemberToken,
+  saveApiKey,
+  saveMemberToken
+} from './storage.js';
 
 function isValidToken(token) {
   const isString = typeof token === 'string';
@@ -32,7 +39,7 @@ export function setupAuth(player) {
   async function handleAuthorizeClick() {
     const key = dom.apiKeyInput?.value.trim() ?? '';
     state.apiKey = key;
-    await t.set('board', 'shared', 'apikey', key);
+    await saveApiKey(key);
     const returnUrl = window.location.href.split('#')[0];
     const authUrl = () =>
       'https://trello.com/1/authorize?expiration=never' +
@@ -57,7 +64,7 @@ export function setupAuth(player) {
         state.popup = null;
         return;
       }
-      await t.set('member', 'private', 'token', token);
+      await saveMemberToken(token);
       state.popup?.close();
       state.popup = null;
       location.reload();
@@ -84,11 +91,13 @@ export function setupAuth(player) {
 
   dom.apiKeyInput?.addEventListener('change', () => {
     state.apiKey = dom.apiKeyInput.value.trim();
-    t.set('board', 'shared', 'apikey', state.apiKey);
+    saveApiKey(state.apiKey).catch((error) => {
+      console.warn('Failed to persist API key change:', error);
+    });
   });
 
   async function initAuth() {
-    const key = await t.get('board', 'shared', 'apikey');
+    const key = await loadApiKey();
     if (key && dom.apiKeyInput) {
       dom.apiKeyInput.value = key;
     }
@@ -96,18 +105,18 @@ export function setupAuth(player) {
 
     const hashMatch = window.location.hash.match(/token=([^&]+)/);
     if (hashMatch) {
-      await t.set('member', 'private', 'token', hashMatch[1]);
+      await saveMemberToken(hashMatch[1]);
       window.location.hash = '';
     }
 
-    const token = await t.get('member', 'private', 'token');
+    const token = await loadMemberToken();
     if (token && (await validateToken(state.apiKey, token))) {
       hideAuthForm();
       state.trelloToken = token;
       await player.loadPlayer();
     } else {
       if (token) {
-        await t.set('member', 'private', 'token', null);
+        await clearMemberToken();
       }
       showAuthForm();
     }
