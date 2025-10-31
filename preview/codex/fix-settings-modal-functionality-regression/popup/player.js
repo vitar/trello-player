@@ -329,6 +329,20 @@ export function createPlayerController(abLoop) {
       abLoop.enforceAbLoop();
     });
 
+    dom.audioPlayer.addEventListener('canplay', () => {
+      const loadToken = Number(dom.audioPlayer.dataset.loadToken);
+      if (loadToken !== state.currentLoadRequest) {
+        return;
+      }
+      state.isAudioLoaded = true;
+      updateSettingsControlsAvailability();
+    });
+
+    dom.audioPlayer.addEventListener('emptied', () => {
+      state.isAudioLoaded = false;
+      updateSettingsControlsAvailability();
+    });
+
     dom.audioPlayer.addEventListener('loadstart', () => {
       clearSoundtouchBuffers();
       updatePlayPauseButton();
