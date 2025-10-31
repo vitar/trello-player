@@ -4,6 +4,7 @@ export const state = {
   currentLoadRequest: 0,
   desiredPitchSemitones: 0,
   desiredPlaybackSpeed: 1,
+  isAudioLoaded: false,
   abPointA: null,
   abPointB: null,
   abRepeatActive: false,
