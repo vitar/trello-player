@@ -19,6 +19,19 @@ Power-up depends on CORS proxy (see **Proxy configuration** and **Cloudflare Wor
 - `src/cloudflare-worker-cors-proxy/` &mdash; Cloudflare Worker source used to provide CORS access to Trello attachments.
 - `test/` &mdash; jsdom-based smoke tests that ensure the popup loads attachments when the Trello API is mocked.
 
+## Popup bundle generation
+
+The popup JavaScript is composed from many small ES modules located in
+`src/trello-power-up/popup/`. The bundler at `scripts/build-popup.mjs`
+processes those modules and writes the concatenated output to
+`src/trello-power-up/trello-player-power-up-popup.js`.
+
+- Run `npm run build` locally to regenerate the bundle when testing changes.
+- The GitHub Actions build workflow runs the same script before packaging the
+  site, so the generated file does not need to be committed.
+- The bundle is listed in `.gitignore` to prevent accidental commits; CI
+  produces the file on demand when preparing the deployment artifacts.
+
 ## Enabling the Power-Up in Trello
 1. Open the [Trello Power-Up admin page](https://trello.com/power-ups/admin) and choose **New**.
 2. Fill in the form:

@@ -29,6 +29,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build popup bundle
+        run: node scripts/build-popup.mjs
+
       - name: Set deployment metadata
         id: metadata
         shell: bash
