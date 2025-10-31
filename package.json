@@ -1,0 +1,16 @@
+{
+  "name": "trello-player",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-popup.mjs",
+    "build:popup": "node scripts/build-popup.mjs",
+    "lint": "eslint \"src/trello-power-up/popup/**/*.js\"",
+    "format": "prettier --write \"src/trello-power-up/popup/**/*.js\""
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5"
+  }
+}
