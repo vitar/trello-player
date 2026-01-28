@@ -1,4 +1,4 @@
-name: Build & Deploy Power-Up
+name: Build & Deploy
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deoploy:
     runs-on: ubuntu-latest
     env:
       PROXY_URL: ${{ vars.PROXY_URL }}
@@ -114,29 +114,9 @@ jobs:
           )
           (dest / "trello-player-config.js").write_text(js, encoding="utf-8")
 
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist
-          if-no-files-found: warn
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout (empty)
-        uses: actions/checkout@v4
-
-      - name: Download built site
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
-
       # PRODUCTION: main → gh-pages root
       - name: Deploy production (main → /)
-        if: needs.build.outputs.is_main == 'true'
+        if: steps.metadata.outputs.is_main == 'true'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
@@ -145,10 +125,10 @@ jobs:
 
       # PREVIEW: branches/PRs → gh-pages:/preview/<branch-or-pr> (keep others)
       - name: Deploy preview (branch/PR → /preview/…)
-        if: needs.build.outputs.is_main != 'true'
+        if: steps.metadata.outputs.is_main != 'true'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
           folder: dist/site
-          target-folder: ${{ needs.build.outputs.target_folder }}
+          target-folder: ${{ steps.metadata.outputs.target_folder }}
           clean: false               # don't wipe existing previews
