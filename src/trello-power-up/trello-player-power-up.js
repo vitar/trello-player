@@ -1,5 +1,5 @@
 window.TrelloPowerUp.initialize({
-  'list-actions': function(t, options){
+  'list-actions': function(){
     return [{
       icon: './trello-player-192.png',
       text: 'Audio Player',

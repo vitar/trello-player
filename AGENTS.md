@@ -14,5 +14,9 @@ These instructions apply to the entire repository and describe non-functional co
 ## Coding Standards
 - Use plain ES6 JavaScript without frameworks.
 
-## Trello Attachment Access
-Currently there are no automated tests, so verify changes manually and run basic sanity checks such as `git status` and `git log -1 --stat` before committing.
+## Checks
+- Run `npm ci` once, then `npm run check` (lint + tests + popup build) before every commit. It must pass; CI runs the same steps on every pull request (`.github/workflows/ci.yml`).
+- Tests live in `test/*.test.js` and use Node's built-in `node:test` runner. Add or update tests with every behaviour change.
+- Tests marked `test.todo` describe known gaps. When you fix one, turn its todo into a real test in the same change.
+- Popup modules are concatenated into one scope by `scripts/build-popup.mjs`, so top-level names must be unique across `src/trello-power-up/popup/` (a test enforces this). Keep browser-independent logic in modules that do not touch `window`/`document` at import time so it can be unit tested.
+- UI behaviour (audio playback, waveform, Trello auth) is not covered by automated tests yet; verify those changes manually.

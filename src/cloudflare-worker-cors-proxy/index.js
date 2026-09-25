@@ -29,7 +29,7 @@ function originMatchesAllowedDomain(origin, domain) {
       originHost === trimmedDomain ||
       originHost.endsWith(`.${trimmedDomain}`)
     );
-  } catch (err) {
+  } catch {
     return origin.endsWith(trimmedDomain);
   }
 }

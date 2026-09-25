@@ -17,7 +17,7 @@ Power-up depends on CORS proxy (see **Proxy configuration** and **Cloudflare Wor
 ## Repository structure
 - `src/trello-power-up/` &mdash; HTML, CSS and JavaScript that power the Trello popup experience, including the `trello-player-config.js` bootstrap that exposes runtime configuration to the player.
 - `src/cloudflare-worker-cors-proxy/` &mdash; Cloudflare Worker source used to provide CORS access to Trello attachments.
-- `test/` &mdash; jsdom-based smoke tests that ensure the popup loads attachments when the Trello API is mocked.
+- `test/` &mdash; unit tests (Node's built-in `node:test` runner) for the CORS proxy, attachment filtering and the popup bundler.
 
 ## Popup bundle generation
 
@@ -90,19 +90,24 @@ behaviour still works.
 5. Trigger a deployment from Cloudflare or by merging a commit into the linked
    branch. The Worker will be published automatically with the updated source.
 
-## Test automation
+## Development checks
 
-The `test` folder contains a small Node.js script that loads
-`trello-player-power-up-popup.html` in a mock Trello environment using
-[jsdom](https://github.com/jsdom/jsdom). The test reads the HTML from disk so it
-always matches the current popup structure. Run `npm install` to fetch the test
-dependency and then run `npm test` to execute `test/power-up-loading-test.js`,
-which verifies that the Power-Up can load attachments when the Trello API is
-mocked.
+Requires Node.js 22 or newer (see `.nvmrc`).
 
-GitHub Actions can run this test automatically.  A workflow file is provided in
-`.github/workflows/test.yml` that installs dependencies and runs `npm test` on
-every push or pull request targeting `main`.
+```sh
+npm ci           # install the locked dev dependencies
+npm run lint     # ESLint across the repository
+npm test         # unit tests in test/*.test.js
+npm run build    # generate the popup bundle
+npm run check    # all of the above
+```
+
+The `CI` workflow (`.github/workflows/ci.yml`) runs lint, tests and the build on
+every pull request and on pushes to `main`.
+
+The tests cover the Cloudflare CORS proxy, attachment filtering and the popup
+bundler. Browser behaviour (playback, waveform, Trello authorization) is not
+covered yet and needs manual verification.
 
 ## Known issues
 

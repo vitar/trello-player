@@ -1,10 +1,5 @@
 import { t } from './trello.js';
-
-const SUPPORTED_AUDIO_EXTENSIONS = ['.m4a', '.mp3'];
-
-function isSupportedAttachment(attachment) {
-  return SUPPORTED_AUDIO_EXTENSIONS.some((ext) => attachment.url?.toLowerCase().endsWith(ext));
-}
+import { isSupportedAttachment } from './attachment-filter.js';
 
 export async function fetchSongAttachments({ apiKey, token }) {
   const listInfo = await t.list('id');
