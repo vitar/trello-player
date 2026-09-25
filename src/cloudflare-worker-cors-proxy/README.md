@@ -21,7 +21,20 @@ Security rules enforced by the Worker (tested in `test/cors-proxy.test.js`):
 - The `x-trello-auth` header is sent upstream as `Authorization` only to Trello
   hosts. Redirects are followed manually and the credentials are dropped when a
   redirect leaves Trello (for example to a signed storage URL).
-- Upstream `Set-Cookie` headers and error details are not passed to the browser.
+- Every request the Worker refuses or cannot complete gets the same bare
+  `403 Forbidden`, whatever the reason, so callers cannot probe which rule
+  failed. The reason (`origin_not_allowed`, `target_not_allowed`,
+  `not_configured`, ...) is logged as JSON; view it with `wrangler tail` or in
+  the Cloudflare dashboard (**Workers → your Worker → Logs**; persistent logs
+  need Workers Logs / observability enabled). Any other status comes from
+  Trello. Upstream `Set-Cookie` headers are not passed to the browser.
+
+Choosing `ALLOWED_ORIGIN_DOMAIN`: the browser's `Origin` header contains only
+the scheme and host, never the path. With GitHub Pages, production
+(`https://<user>.github.io/<repo>/`) and pull request previews
+(`https://<user>.github.io/<repo>/preview/pr-<n>/`) therefore share one origin,
+so `<user>.github.io` allows both. Never set it to `github.io`: that would allow
+every GitHub Pages site.
 
 1. Update `src/cloudflare-worker-cors-proxy/wrangler.toml` if required:
    - Change the `name` field to match your Worker name in Cloudflare.

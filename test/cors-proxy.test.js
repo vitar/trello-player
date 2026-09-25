@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { TRELLO_HOSTS } from '../src/cloudflare-worker-cors-proxy/index.js';
+import worker, { REJECT_REASONS, TRELLO_HOSTS } from '../src/cloudflare-worker-cors-proxy/index.js';
 
 const PROXY = 'https://proxy.example.workers.dev/';
 const ATTACHMENT_URL = 'https://trello.com/1/cards/abc/attachments/def/download/song.mp3';
@@ -42,12 +42,26 @@ function upstreamSequence(calls, responses) {
 
 const AUTH = 'OAuth oauth_consumer_key="key", oauth_token="token"';
 
+// Every rejection must look exactly like this to the caller.
+async function assertForbidden(response, message) {
+  assert.equal(response.status, 403, message);
+  assert.equal(await response.text(), 'Forbidden', message);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), null, message);
+}
+
 describe('cors proxy', () => {
   let upstreamCalls;
   let originalFetch;
+  let originalWarn;
+  // Parsed rejection log entries written by the proxy via console.warn.
+  let rejections;
+  const lastReason = () => rejections.at(-1)?.reason;
 
   beforeEach(() => {
     upstreamCalls = [];
+    rejections = [];
+    originalWarn = console.warn;
+    console.warn = (line) => rejections.push(JSON.parse(line));
     originalFetch = globalThis.fetch;
     globalThis.fetch = async (request) => {
       upstreamCalls.push(request);
@@ -57,6 +71,7 @@ describe('cors proxy', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
   });
 
   describe('request validation', () => {
@@ -151,14 +166,14 @@ describe('cors proxy', () => {
       assert.equal(await response.text(), 'audio-bytes');
     });
 
-    test('returns 502 without leaking error details when the upstream fetch throws', async (t) => {
-      t.mock.method(console, 'error', () => {});
+    test('returns a bare 403 and logs the detail when the upstream fetch throws', async () => {
       globalThis.fetch = async () => {
         throw new Error('secret internal detail');
       };
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.status, 502);
-      assert.doesNotMatch(await response.text(), /secret internal detail/);
+      await assertForbidden(response);
+      assert.equal(lastReason(), REJECT_REASONS.UPSTREAM_ERROR);
+      assert.equal(rejections.at(-1).error, 'secret internal detail');
     });
 
     test('drops Set-Cookie from upstream responses', async () => {
@@ -218,21 +233,23 @@ describe('cors proxy', () => {
         proxyRequest({ headers: { 'x-trello-auth': AUTH } }),
         ENV,
       );
-      assert.equal(response.status, 502);
+      await assertForbidden(response);
+      assert.equal(lastReason(), REJECT_REASONS.BAD_REDIRECT);
       assert.equal(upstreamCalls.length, 1);
     });
 
     test('refuses redirects with a malformed Location header', async () => {
       globalThis.fetch = upstreamSequence(upstreamCalls, [redirectTo('https://[bad')]);
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.status, 502);
-      assert.equal(await response.text(), 'Bad upstream redirect');
+      await assertForbidden(response);
+      assert.equal(lastReason(), REJECT_REASONS.BAD_REDIRECT);
     });
 
     test('refuses redirects without a Location header', async () => {
       globalThis.fetch = upstreamSequence(upstreamCalls, [new Response(null, { status: 302 })]);
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.status, 502);
+      await assertForbidden(response);
+      assert.equal(lastReason(), REJECT_REASONS.BAD_REDIRECT);
     });
 
     test('stops after too many redirects', async () => {
@@ -241,7 +258,8 @@ describe('cors proxy', () => {
         return redirectTo('https://trello.com/loop');
       };
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.status, 502);
+      await assertForbidden(response);
+      assert.equal(lastReason(), REJECT_REASONS.TOO_MANY_REDIRECTS);
       assert.equal(upstreamCalls.length, 6);
     });
   });
@@ -292,7 +310,8 @@ describe('cors proxy', () => {
     test('rejects methods other than GET, HEAD and OPTIONS', async () => {
       for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
         const response = await worker.fetch(proxyRequest({ method }), ENV);
-        assert.equal(response.status, 405, method);
+        await assertForbidden(response, method);
+        assert.equal(lastReason(), REJECT_REASONS.METHOD_NOT_ALLOWED);
       }
       assert.equal(upstreamCalls.length, 0);
     });
@@ -316,7 +335,8 @@ describe('cors proxy', () => {
         { ALLOWED_ORIGIN_DOMAIN: ' , ' },
       ]) {
         const response = await worker.fetch(proxyRequest(), env);
-        assert.equal(response.status, 500, JSON.stringify(env));
+        await assertForbidden(response, JSON.stringify(env));
+        assert.equal(lastReason(), REJECT_REASONS.NOT_CONFIGURED);
       }
       assert.equal(upstreamCalls.length, 0);
     });
@@ -327,6 +347,72 @@ describe('cors proxy', () => {
         assert.equal(response.status, 403, origin);
       }
       assert.equal(upstreamCalls.length, 0);
+    });
+  });
+
+  describe('uniform rejections', () => {
+    // One request per rejection reason. Callers must not be able to tell them apart.
+    const cases = {
+      [REJECT_REASONS.NOT_CONFIGURED]: () => worker.fetch(proxyRequest(), {}),
+      [REJECT_REASONS.INVALID_TARGET]: () =>
+        worker.fetch(proxyRequest({ url: 'http://trello.com/song.mp3' }), ENV),
+      [REJECT_REASONS.TARGET_NOT_ALLOWED]: () =>
+        worker.fetch(proxyRequest({ url: 'https://evil.example/song.mp3' }), ENV),
+      [REJECT_REASONS.ORIGIN_NOT_ALLOWED]: () =>
+        worker.fetch(proxyRequest({ origin: 'https://evil.example' }), ENV),
+      [REJECT_REASONS.METHOD_NOT_ALLOWED]: () =>
+        worker.fetch(proxyRequest({ method: 'POST' }), ENV),
+      [REJECT_REASONS.BAD_REDIRECT]: () => {
+        globalThis.fetch = async () => redirectTo('http://insecure.example/');
+        return worker.fetch(proxyRequest(), ENV);
+      },
+      [REJECT_REASONS.TOO_MANY_REDIRECTS]: () => {
+        globalThis.fetch = async () => redirectTo('https://trello.com/loop');
+        return worker.fetch(proxyRequest(), ENV);
+      },
+      [REJECT_REASONS.UPSTREAM_ERROR]: () => {
+        globalThis.fetch = async () => {
+          throw new Error('boom');
+        };
+        return worker.fetch(proxyRequest(), ENV);
+      },
+    };
+
+    test('covers every rejection reason', () => {
+      assert.deepEqual(Object.keys(cases).sort(), Object.values(REJECT_REASONS).sort());
+    });
+
+    test('every rejection returns an identical response and logs its reason', async () => {
+      let reference;
+      for (const [reason, run] of Object.entries(cases)) {
+        const response = await run();
+        const snapshot = {
+          status: response.status,
+          body: await response.text(),
+          headers: [...response.headers.entries()],
+        };
+        reference ??= snapshot;
+        assert.deepEqual(snapshot, reference, reason);
+        assert.equal(lastReason(), reason);
+      }
+      assert.equal(reference.status, 403);
+      assert.equal(reference.body, 'Forbidden');
+    });
+
+    test('rejection logs never contain credentials, paths or query strings', async () => {
+      await worker.fetch(
+        proxyRequest({
+          url: 'https://evil.example/secret/path.mp3?token=abc',
+          headers: { 'x-trello-auth': AUTH },
+        }),
+        ENV,
+      );
+      const logged = JSON.stringify(rejections);
+      assert.equal(lastReason(), REJECT_REASONS.TARGET_NOT_ALLOWED);
+      assert.equal(rejections.at(-1).host, 'evil.example');
+      for (const secret of ['oauth_token', 'token=abc', '/secret/path.mp3']) {
+        assert.ok(!logged.includes(secret), secret);
+      }
     });
   });
 });

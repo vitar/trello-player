@@ -32,4 +32,5 @@ These must hold after every change. Tests in `test/` enforce them; never weaken 
 - The CORS proxy (`src/cloudflare-worker-cors-proxy/index.js`) only fetches `https://` URLs on the hosts in `TRELLO_HOSTS`. Never add non-Trello hosts to that list.
 - Trello credentials (`x-trello-auth` / `Authorization`) are only ever sent to Trello hosts, including across redirects.
 - The proxy refuses all requests when `ALLOWED_ORIGIN_DOMAIN` is not configured.
+- Every proxy rejection (any reason, including upstream failures) returns the same bare `403 Forbidden` with no extra headers. Reasons go only to the Worker log, never into the response.
 - The popup only plays attachments uploaded to Trello (`isUpload === true`), never link attachments.
