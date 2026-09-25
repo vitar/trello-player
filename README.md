@@ -2,7 +2,7 @@
 
 Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list.
 
-Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.
+Uploaded attachments ending in `.m4a` or `.mp3` are grouped into a playlist.
 
 <img src="trello-player-v0.5-screenshot1.png" width="600">
 
@@ -17,7 +17,7 @@ Power-up depends on CORS proxy (see **Proxy configuration** and **Cloudflare Wor
 ## Repository structure
 - `src/trello-power-up/` &mdash; HTML, CSS and JavaScript that power the Trello popup experience, including the `trello-player-config.js` bootstrap that exposes runtime configuration to the player.
 - `src/cloudflare-worker-cors-proxy/` &mdash; Cloudflare Worker source used to provide CORS access to Trello attachments.
-- `test/` &mdash; jsdom-based smoke tests that ensure the popup loads attachments when the Trello API is mocked.
+- `test/` &mdash; unit tests (Node's built-in `node:test` runner) for the CORS proxy, attachment filtering and the popup bundler.
 
 ## Popup bundle generation
 
@@ -48,7 +48,9 @@ processes those modules and writes the concatenated output to
 5. In a board list open the list menu (`...`) and select **Audio Player**.
 
 ## Usage
-- The popup displays all `.m4a` and `.mp3` attachments from cards in the list.
+- The popup displays all `.m4a` and `.mp3` files uploaded to cards in the list.
+  Link attachments (URLs pasted into a card) are ignored, because fetching them
+  would send your Trello credentials to a non-Trello host.
 - Use **Previous** and **Next** to navigate the playlist while the audio player plays each attachment.
 - Click the wrench next to the waveform area to adjust pitch shift.
 
@@ -57,8 +59,9 @@ _Trello mobile apps do not support custom Power-Ups._
 
 ## Proxy configuration
 - `trello-player-config.js` defines `window.trelloPlayerConfig.proxyUrl`.
-- During the GitHub Actions build the `Build and Publish Trello Power-Up` workflow reads the `PROXY_URL` environment variable
-  (configured in the repository **Settings → Security → Secrets and variables → Actions → Variables → Repository variables**) and rewrites `trello-player-config.js` in the deployment folder so GitHub Pages serves your private proxy URL.
+- During deployment the `CI` workflow reads the `PROXY_URL` repository variable
+  (configured in the repository **Settings → Security → Secrets and variables → Actions → Variables → Repository variables**) and `scripts/prepare-site.mjs` rewrites `trello-player-config.js` in the deployment folder so GitHub Pages serves your private proxy URL.
+  Deployment fails if `PROXY_URL` is missing or is not an `https://` URL.
 - For local development you can temporarily override the proxy by editing `src/trello-power-up/trello-player-config.js` or by
   defining `window.trelloPlayerConfig.proxyUrl` in the browser console before loading attachments.
 
@@ -68,8 +71,31 @@ The CORS proxy located in `src/cloudflare-worker-cors-proxy/index.js` can now be
 deployed automatically through Cloudflare's GitHub connector. The Worker reads
 an `ALLOWED_ORIGIN_DOMAIN` environment variable (a comma-separated list of
 domains) to decide which Trello Power-Up origins can use the proxy. If the
-variable is not set, it defaults to `yourdomain.com` so the previous manual
-behaviour still works.
+variable is not set or empty, the Worker refuses every request (HTTP 500) so a
+misconfigured deployment is never an open proxy.
+
+Security rules enforced by the Worker (tested in `test/cors-proxy.test.js`):
+
+- Only `https://` URLs on `trello.com` or `api.trello.com` can be proxied;
+  anything else gets HTTP 403.
+- Only `GET`, `HEAD` and `OPTIONS` are accepted.
+- The `x-trello-auth` header is sent upstream as `Authorization` only to Trello
+  hosts. Redirects are followed manually and the credentials are dropped when a
+  redirect leaves Trello (for example to a signed storage URL).
+- Every request the Worker refuses or cannot complete gets the same bare
+  `403 Forbidden`, whatever the reason, so callers cannot probe which rule
+  failed. The reason (`origin_not_allowed`, `target_not_allowed`,
+  `not_configured`, ...) is logged as JSON; view it with `wrangler tail` or in
+  the Cloudflare dashboard (**Workers → your Worker → Logs**; persistent logs
+  need Workers Logs / observability enabled). Any other status comes from
+  Trello. Upstream `Set-Cookie` headers are not passed to the browser.
+
+Choosing `ALLOWED_ORIGIN_DOMAIN`: the browser's `Origin` header contains only
+the scheme and host, never the path. With GitHub Pages, production
+(`https://<user>.github.io/<repo>/`) and pull request previews
+(`https://<user>.github.io/<repo>/preview/pr-<n>/`) therefore share one origin,
+so `<user>.github.io` allows both. Never set it to `github.io`: that would allow
+every GitHub Pages site.
 
 1. Update `src/cloudflare-worker-cors-proxy/wrangler.toml` if required:
    - Change the `name` field to match your Worker name in Cloudflare.
@@ -90,19 +116,41 @@ behaviour still works.
 5. Trigger a deployment from Cloudflare or by merging a commit into the linked
    branch. The Worker will be published automatically with the updated source.
 
-## Test automation
+## Development checks
 
-The `test` folder contains a small Node.js script that loads
-`trello-player-power-up-popup.html` in a mock Trello environment using
-[jsdom](https://github.com/jsdom/jsdom). The test reads the HTML from disk so it
-always matches the current popup structure. Run `npm install` to fetch the test
-dependency and then run `npm test` to execute `test/power-up-loading-test.js`,
-which verifies that the Power-Up can load attachments when the Trello API is
-mocked.
+Requires Node.js 22 or newer (see `.nvmrc`).
 
-GitHub Actions can run this test automatically.  A workflow file is provided in
-`.github/workflows/test.yml` that installs dependencies and runs `npm test` on
-every push or pull request targeting `main`.
+```sh
+npm ci           # install the locked dev dependencies
+npm run lint     # ESLint across the repository
+npm test         # unit tests in test/*.test.js
+npm run build    # generate the popup bundle
+npm run check    # all of the above
+```
+
+The `CI` workflow (`.github/workflows/ci.yml`) runs lint, tests and the build on
+every pull request and on pushes to `main`. Deployment to the `gh-pages` branch
+only happens after those checks pass:
+
+| Event | Deployment |
+| --- | --- |
+| Push to `main` | Production, at the `gh-pages` root (existing previews are kept) |
+| Pull request from this repository | Preview at `gh-pages:/preview/pr-<number>/` |
+| Pull request closed or merged | That preview is removed |
+| Pull request from a fork | Checked only, never deployed |
+
+Pushing a branch without opening a pull request does not deploy anything.
+
+To reproduce the deployment build locally:
+
+```sh
+npm run build
+PROXY_URL=https://your-proxy.workers.dev/ node scripts/prepare-site.mjs dist/site
+```
+
+The tests cover the Cloudflare CORS proxy, attachment filtering and the popup
+bundler. Browser behaviour (playback, waveform, Trello authorization) is not
+covered yet and needs manual verification.
 
 ## Known issues
 

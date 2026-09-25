@@ -1,0 +1,161 @@
+name: CI
+
+# Single pipeline: every change is linted, tested and built first; deploys run
+# only after that passes.
+#   - push to main           -> deploy production to the gh-pages root
+#   - pull request (this repo)-> deploy preview to gh-pages:/preview/pr-<number>
+#   - pull request closed    -> remove that preview
+# Pull requests from forks are checked but never deployed.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build popup bundle
+        run: npm run build
+
+  deploy-production:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push to the gh-pages branch
+    # GitHub keeps only one pending job per group, so production and each preview
+    # get their own group; the deploy action retries if pushes to gh-pages race.
+    concurrency:
+      group: gh-pages-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Build site
+        env:
+          PROXY_URL: ${{ vars.PROXY_URL }}
+        run: |
+          npm run build
+          node scripts/prepare-site.mjs dist/site
+
+      - name: Deploy to gh-pages root
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
+        with:
+          branch: gh-pages
+          folder: dist/site
+          clean: true
+          clean-exclude: |
+            preview/
+
+  deploy-preview:
+    needs: check
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push to the gh-pages branch
+    concurrency:
+      group: gh-pages-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Build site
+        env:
+          PROXY_URL: ${{ vars.PROXY_URL }}
+        run: |
+          npm run build
+          node scripts/prepare-site.mjs dist/site
+
+      - name: Deploy to gh-pages preview folder
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
+        with:
+          branch: gh-pages
+          folder: dist/site
+          target-folder: preview/pr-${{ github.event.pull_request.number }}
+          clean: true
+
+  cleanup-preview:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # push to the gh-pages branch
+    concurrency:
+      group: gh-pages-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: gh-pages
+
+      - name: Remove preview folder
+        env:
+          PREVIEW_DIR: preview/pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ ! -d "$PREVIEW_DIR" ]; then
+            echo "No preview at $PREVIEW_DIR"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -r --quiet -- "$PREVIEW_DIR"
+          git commit --quiet -m "Remove preview $PREVIEW_DIR"
+          git push origin HEAD:gh-pages

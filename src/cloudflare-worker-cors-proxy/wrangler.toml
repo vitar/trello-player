@@ -4,5 +4,7 @@ compatibility_date = "2024-06-01"
 compatibility_flags = []
 workers_dev = true
 
+# ALLOWED_ORIGIN_DOMAIN must be set to the domain hosting the Power-Up.
+# The Worker refuses every request when it is empty or missing.
 [vars]
 ALLOWED_ORIGIN_DOMAIN = "yourdomain.com"
