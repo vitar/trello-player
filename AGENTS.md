@@ -21,6 +21,12 @@ These instructions apply to the entire repository and describe non-functional co
 - Popup modules are concatenated into one scope by `scripts/build-popup.mjs`, so top-level names must be unique across `src/trello-power-up/popup/` (a test enforces this). Keep browser-independent logic in modules that do not touch `window`/`document` at import time so it can be unit tested.
 - UI behaviour (audio playback, waveform, Trello auth) is not covered by automated tests yet; verify those changes manually.
 
+## CI and Deployment
+- `.github/workflows/ci.yml` is the only workflow. Deploy jobs must keep `needs: check` so nothing deploys without passing lint, tests and build.
+- Keep `permissions: contents: read` at the top level; grant `contents: write` only on the jobs that push to `gh-pages`.
+- Never interpolate `${{ }}` expressions with user-controlled values (branch names, PR titles, commit messages) directly into `run:` scripts; pass them through `env:` instead.
+- Pin third-party actions to a full commit SHA with the version in a trailing comment. Validate workflow changes with `actionlint` when available.
+
 ## Security Invariants
 These must hold after every change. Tests in `test/` enforce them; never weaken or delete those tests to make a change pass.
 - The CORS proxy (`src/cloudflare-worker-cors-proxy/index.js`) only fetches `https://` URLs on the hosts in `TRELLO_HOSTS`. Never add non-Trello hosts to that list.

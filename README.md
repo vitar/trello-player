@@ -59,8 +59,9 @@ _Trello mobile apps do not support custom Power-Ups._
 
 ## Proxy configuration
 - `trello-player-config.js` defines `window.trelloPlayerConfig.proxyUrl`.
-- During the GitHub Actions build the `Build and Publish Trello Power-Up` workflow reads the `PROXY_URL` environment variable
-  (configured in the repository **Settings → Security → Secrets and variables → Actions → Variables → Repository variables**) and rewrites `trello-player-config.js` in the deployment folder so GitHub Pages serves your private proxy URL.
+- During deployment the `CI` workflow reads the `PROXY_URL` repository variable
+  (configured in the repository **Settings → Security → Secrets and variables → Actions → Variables → Repository variables**) and `scripts/prepare-site.mjs` rewrites `trello-player-config.js` in the deployment folder so GitHub Pages serves your private proxy URL.
+  Deployment fails if `PROXY_URL` is missing or is not an `https://` URL.
 - For local development you can temporarily override the proxy by editing `src/trello-power-up/trello-player-config.js` or by
   defining `window.trelloPlayerConfig.proxyUrl` in the browser console before loading attachments.
 
@@ -115,7 +116,24 @@ npm run check    # all of the above
 ```
 
 The `CI` workflow (`.github/workflows/ci.yml`) runs lint, tests and the build on
-every pull request and on pushes to `main`.
+every pull request and on pushes to `main`. Deployment to the `gh-pages` branch
+only happens after those checks pass:
+
+| Event | Deployment |
+| --- | --- |
+| Push to `main` | Production, at the `gh-pages` root (existing previews are kept) |
+| Pull request from this repository | Preview at `gh-pages:/preview/pr-<number>/` |
+| Pull request closed or merged | That preview is removed |
+| Pull request from a fork | Checked only, never deployed |
+
+Pushing a branch without opening a pull request does not deploy anything.
+
+To reproduce the deployment build locally:
+
+```sh
+npm run build
+PROXY_URL=https://your-proxy.workers.dev/ node scripts/prepare-site.mjs dist/site
+```
 
 The tests cover the Cloudflare CORS proxy, attachment filtering and the popup
 bundler. Browser behaviour (playback, waveform, Trello authorization) is not
