@@ -11,7 +11,7 @@ const bundlePath = path.join(projectRoot, 'src/trello-power-up/trello-player-pow
 
 function buildBundle() {
   execFileSync(process.execPath, [path.join(projectRoot, 'scripts/build-popup.mjs')], {
-    cwd: projectRoot
+    cwd: projectRoot,
   });
   return fs.readFileSync(bundlePath, 'utf8');
 }
@@ -30,7 +30,7 @@ describe('popup bundle', () => {
       assert.match(
         bundle,
         new RegExp(`// Source: src/trello-power-up/popup/${file.replace('.', '\\.')}\\n`),
-        `${file} is not reachable from popup/index.js`
+        `${file} is not reachable from popup/index.js`,
       );
     }
   });

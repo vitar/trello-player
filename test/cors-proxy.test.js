@@ -1,13 +1,17 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import worker from '../src/cloudflare-worker-cors-proxy/index.js';
+import worker, { TRELLO_HOSTS } from '../src/cloudflare-worker-cors-proxy/index.js';
 
 const PROXY = 'https://proxy.example.workers.dev/';
-const ATTACHMENT_URL =
-  'https://trello.com/1/cards/abc/attachments/def/download/song.mp3';
+const ATTACHMENT_URL = 'https://trello.com/1/cards/abc/attachments/def/download/song.mp3';
 const ENV = { ALLOWED_ORIGIN_DOMAIN: 'player.example.com' };
 
-function proxyRequest({ url = ATTACHMENT_URL, origin = 'https://player.example.com', method = 'GET', headers = {} } = {}) {
+function proxyRequest({
+  url = ATTACHMENT_URL,
+  origin = 'https://player.example.com',
+  method = 'GET',
+  headers = {},
+} = {}) {
   const target = url === null ? PROXY : `${PROXY}?url=${encodeURIComponent(url)}`;
   const allHeaders = { ...headers };
   if (origin !== null) {
@@ -15,6 +19,28 @@ function proxyRequest({ url = ATTACHMENT_URL, origin = 'https://player.example.c
   }
   return new Request(target, { method, headers: allHeaders });
 }
+
+function audioResponse() {
+  return new Response('audio-bytes', {
+    status: 200,
+    headers: { 'Content-Type': 'audio/mpeg' },
+  });
+}
+
+function redirectTo(location, status = 302) {
+  return new Response(null, { status, headers: { Location: location } });
+}
+
+// Serves the given responses in order, recording each upstream request.
+function upstreamSequence(calls, responses) {
+  return async (request) => {
+    calls.push(request);
+    const next = responses.shift();
+    return typeof next === 'function' ? next() : next;
+  };
+}
+
+const AUTH = 'OAuth oauth_consumer_key="key", oauth_token="token"';
 
 describe('cors proxy', () => {
   let upstreamCalls;
@@ -25,10 +51,7 @@ describe('cors proxy', () => {
     originalFetch = globalThis.fetch;
     globalThis.fetch = async (request) => {
       upstreamCalls.push(request);
-      return new Response('audio-bytes', {
-        status: 200,
-        headers: { 'Content-Type': 'audio/mpeg' }
-      });
+      return audioResponse();
     };
   });
 
@@ -58,7 +81,7 @@ describe('cors proxy', () => {
     test('rejects look-alike origins that only end with the allowed domain text', async () => {
       const response = await worker.fetch(
         proxyRequest({ origin: 'https://evilplayer.example.com' }),
-        ENV
+        ENV,
       );
       assert.equal(response.status, 403);
       assert.equal(upstreamCalls.length, 0);
@@ -72,7 +95,7 @@ describe('cors proxy', () => {
     test('accepts subdomains of the allowed domain', async () => {
       const response = await worker.fetch(
         proxyRequest({ origin: 'https://preview.player.example.com' }),
-        ENV
+        ENV,
       );
       assert.equal(response.status, 200);
     });
@@ -89,12 +112,15 @@ describe('cors proxy', () => {
       const response = await worker.fetch(
         proxyRequest({
           method: 'OPTIONS',
-          headers: { 'Access-Control-Request-Headers': 'x-trello-auth' }
+          headers: { 'Access-Control-Request-Headers': 'x-trello-auth' },
         }),
-        ENV
+        ENV,
       );
       assert.equal(response.status, 204);
-      assert.equal(response.headers.get('Access-Control-Allow-Origin'), 'https://player.example.com');
+      assert.equal(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://player.example.com',
+      );
       assert.equal(response.headers.get('Access-Control-Allow-Headers'), 'x-trello-auth');
       assert.equal(upstreamCalls.length, 0);
     });
@@ -102,11 +128,10 @@ describe('cors proxy', () => {
 
   describe('forwarding', () => {
     test('converts x-trello-auth into the upstream Authorization header', async () => {
-      const auth = 'OAuth oauth_consumer_key="key", oauth_token="token"';
-      await worker.fetch(proxyRequest({ headers: { 'x-trello-auth': auth } }), ENV);
+      await worker.fetch(proxyRequest({ headers: { 'x-trello-auth': AUTH } }), ENV);
       assert.equal(upstreamCalls.length, 1);
       assert.equal(upstreamCalls[0].url, ATTACHMENT_URL);
-      assert.equal(upstreamCalls[0].headers.get('Authorization'), auth);
+      assert.equal(upstreamCalls[0].headers.get('Authorization'), AUTH);
     });
 
     test('does not send an Authorization header when x-trello-auth is absent', async () => {
@@ -116,29 +141,192 @@ describe('cors proxy', () => {
 
     test('adds CORS and caching headers to the upstream response', async () => {
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.headers.get('Access-Control-Allow-Origin'), 'https://player.example.com');
+      assert.equal(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://player.example.com',
+      );
       assert.equal(response.headers.get('Vary'), 'Origin');
       assert.equal(response.headers.get('Cache-Control'), 'private, max-age=86400');
       assert.equal(response.headers.get('Content-Type'), 'audio/mpeg');
       assert.equal(await response.text(), 'audio-bytes');
     });
 
-    test('returns 500 when the upstream fetch throws', async () => {
+    test('returns 502 without leaking error details when the upstream fetch throws', async (t) => {
+      t.mock.method(console, 'error', () => {});
       globalThis.fetch = async () => {
-        throw new Error('network down');
+        throw new Error('secret internal detail');
       };
       const response = await worker.fetch(proxyRequest(), ENV);
-      assert.equal(response.status, 500);
+      assert.equal(response.status, 502);
+      assert.doesNotMatch(await response.text(), /secret internal detail/);
+    });
+
+    test('drops Set-Cookie from upstream responses', async () => {
+      globalThis.fetch = async () =>
+        new Response('audio-bytes', { status: 200, headers: { 'Set-Cookie': 'session=abc' } });
+      const response = await worker.fetch(proxyRequest(), ENV);
+      assert.equal(response.headers.get('Set-Cookie'), null);
+    });
+
+    test('uses manual redirects so credentials are never auto-forwarded', async () => {
+      await worker.fetch(proxyRequest({ headers: { 'x-trello-auth': AUTH } }), ENV);
+      assert.equal(upstreamCalls[0].redirect, 'manual');
+    });
+
+    test('keeps Authorization on redirects that stay on Trello hosts', async () => {
+      globalThis.fetch = upstreamSequence(upstreamCalls, [
+        redirectTo('https://api.trello.com/1/files/song.mp3'),
+        audioResponse,
+      ]);
+      const response = await worker.fetch(
+        proxyRequest({ headers: { 'x-trello-auth': AUTH } }),
+        ENV,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(upstreamCalls.length, 2);
+      assert.equal(upstreamCalls[1].headers.get('Authorization'), AUTH);
+    });
+
+    test('drops Authorization when a redirect leaves Trello (e.g. signed storage URL)', async () => {
+      const signedUrl = 'https://attachments.storage.example/song.mp3?X-Amz-Signature=abc';
+      globalThis.fetch = upstreamSequence(upstreamCalls, [redirectTo(signedUrl), audioResponse]);
+      const response = await worker.fetch(
+        proxyRequest({ headers: { 'x-trello-auth': AUTH } }),
+        ENV,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), 'audio-bytes');
+      assert.equal(upstreamCalls[0].headers.get('Authorization'), AUTH);
+      assert.equal(upstreamCalls[1].url, signedUrl);
+      assert.equal(upstreamCalls[1].headers.get('Authorization'), null);
+    });
+
+    test('resolves relative redirect locations against the current URL', async () => {
+      globalThis.fetch = upstreamSequence(upstreamCalls, [
+        redirectTo('/1/other/song.mp3'),
+        audioResponse,
+      ]);
+      await worker.fetch(proxyRequest(), ENV);
+      assert.equal(upstreamCalls[1].url, 'https://trello.com/1/other/song.mp3');
+    });
+
+    test('refuses redirects to non-https URLs', async () => {
+      globalThis.fetch = upstreamSequence(upstreamCalls, [
+        redirectTo('http://trello.com/song.mp3'),
+      ]);
+      const response = await worker.fetch(
+        proxyRequest({ headers: { 'x-trello-auth': AUTH } }),
+        ENV,
+      );
+      assert.equal(response.status, 502);
+      assert.equal(upstreamCalls.length, 1);
+    });
+
+    test('refuses redirects with a malformed Location header', async () => {
+      globalThis.fetch = upstreamSequence(upstreamCalls, [redirectTo('https://[bad')]);
+      const response = await worker.fetch(proxyRequest(), ENV);
+      assert.equal(response.status, 502);
+      assert.equal(await response.text(), 'Bad upstream redirect');
+    });
+
+    test('refuses redirects without a Location header', async () => {
+      globalThis.fetch = upstreamSequence(upstreamCalls, [new Response(null, { status: 302 })]);
+      const response = await worker.fetch(proxyRequest(), ENV);
+      assert.equal(response.status, 502);
+    });
+
+    test('stops after too many redirects', async () => {
+      globalThis.fetch = async (request) => {
+        upstreamCalls.push(request);
+        return redirectTo('https://trello.com/loop');
+      };
+      const response = await worker.fetch(proxyRequest(), ENV);
+      assert.equal(response.status, 502);
+      assert.equal(upstreamCalls.length, 6);
     });
   });
 
-  // Known security gaps from the production review. Convert each todo into a
-  // real test in the same change that fixes it.
-  describe('security hardening (planned)', () => {
-    test.todo('rejects target URLs that are not https');
-    test.todo('rejects target hosts outside the Trello allowlist');
-    test.todo('never forwards Authorization to non-Trello hosts');
-    test.todo('rejects methods other than GET, HEAD and OPTIONS');
-    test.todo('refuses all requests when ALLOWED_ORIGIN_DOMAIN is not configured');
+  describe('security hardening', () => {
+    test('rejects target URLs that are not https', async () => {
+      const response = await worker.fetch(
+        proxyRequest({ url: 'http://trello.com/1/cards/abc/attachments/def/download/song.mp3' }),
+        ENV,
+      );
+      assert.equal(response.status, 403);
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('rejects target URLs that cannot be parsed', async () => {
+      const response = await worker.fetch(proxyRequest({ url: 'not a url' }), ENV);
+      assert.equal(response.status, 403);
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('allows only the Trello hosts', () => {
+      assert.deepEqual(TRELLO_HOSTS, ['trello.com', 'api.trello.com']);
+    });
+
+    test('rejects target hosts outside the Trello allowlist', async () => {
+      for (const url of [
+        'https://evil.example/song.mp3',
+        'https://trello.com.evil.example/song.mp3',
+        'https://eviltrello.com/song.mp3',
+        'https://169.254.169.254/latest/meta-data/',
+        'https://user@evil.example/trello.com/song.mp3',
+      ]) {
+        const response = await worker.fetch(proxyRequest({ url }), ENV);
+        assert.equal(response.status, 403, url);
+      }
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('never forwards Authorization to non-Trello hosts', async () => {
+      const response = await worker.fetch(
+        proxyRequest({ url: 'https://evil.example/song.mp3', headers: { 'x-trello-auth': AUTH } }),
+        ENV,
+      );
+      assert.equal(response.status, 403);
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('rejects methods other than GET, HEAD and OPTIONS', async () => {
+      for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+        const response = await worker.fetch(proxyRequest({ method }), ENV);
+        assert.equal(response.status, 405, method);
+      }
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('forwards HEAD requests', async () => {
+      const response = await worker.fetch(proxyRequest({ method: 'HEAD' }), ENV);
+      assert.equal(response.status, 200);
+      assert.equal(upstreamCalls[0].method, 'HEAD');
+    });
+
+    test('advertises only GET, HEAD and OPTIONS in preflight responses', async () => {
+      const response = await worker.fetch(proxyRequest({ method: 'OPTIONS' }), ENV);
+      assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'GET,HEAD,OPTIONS');
+    });
+
+    test('refuses all requests when ALLOWED_ORIGIN_DOMAIN is not configured', async () => {
+      for (const env of [
+        undefined,
+        {},
+        { ALLOWED_ORIGIN_DOMAIN: '' },
+        { ALLOWED_ORIGIN_DOMAIN: ' , ' },
+      ]) {
+        const response = await worker.fetch(proxyRequest(), env);
+        assert.equal(response.status, 500, JSON.stringify(env));
+      }
+      assert.equal(upstreamCalls.length, 0);
+    });
+
+    test('rejects origins that are not valid URLs', async () => {
+      for (const origin of ['null', 'player.example.com', 'evil-player.example.com']) {
+        const response = await worker.fetch(proxyRequest({ origin }), ENV);
+        assert.equal(response.status, 403, origin);
+      }
+      assert.equal(upstreamCalls.length, 0);
+    });
   });
 });

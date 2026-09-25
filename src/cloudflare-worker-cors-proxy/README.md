@@ -10,8 +10,18 @@ The CORS proxy located in `index.js` can now be
 deployed automatically through Cloudflare's GitHub connector. The Worker reads
 an `ALLOWED_ORIGIN_DOMAIN` environment variable (a comma-separated list of
 domains) to decide which Trello Power-Up origins can use the proxy. If the
-variable is not set, it defaults to `yourdomain.com` so the previous manual
-behaviour still works.
+variable is not set or empty, the Worker refuses every request (HTTP 500) so a
+misconfigured deployment is never an open proxy.
+
+Security rules enforced by the Worker (tested in `test/cors-proxy.test.js`):
+
+- Only `https://` URLs on `trello.com` or `api.trello.com` can be proxied;
+  anything else gets HTTP 403.
+- Only `GET`, `HEAD` and `OPTIONS` are accepted.
+- The `x-trello-auth` header is sent upstream as `Authorization` only to Trello
+  hosts. Redirects are followed manually and the credentials are dropped when a
+  redirect leaves Trello (for example to a signed storage URL).
+- Upstream `Set-Cookie` headers and error details are not passed to the browser.
 
 1. Update `src/cloudflare-worker-cors-proxy/wrangler.toml` if required:
    - Change the `name` field to match your Worker name in Cloudflare.

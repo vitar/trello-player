@@ -20,3 +20,10 @@ These instructions apply to the entire repository and describe non-functional co
 - Tests marked `test.todo` describe known gaps. When you fix one, turn its todo into a real test in the same change.
 - Popup modules are concatenated into one scope by `scripts/build-popup.mjs`, so top-level names must be unique across `src/trello-power-up/popup/` (a test enforces this). Keep browser-independent logic in modules that do not touch `window`/`document` at import time so it can be unit tested.
 - UI behaviour (audio playback, waveform, Trello auth) is not covered by automated tests yet; verify those changes manually.
+
+## Security Invariants
+These must hold after every change. Tests in `test/` enforce them; never weaken or delete those tests to make a change pass.
+- The CORS proxy (`src/cloudflare-worker-cors-proxy/index.js`) only fetches `https://` URLs on the hosts in `TRELLO_HOSTS`. Never add non-Trello hosts to that list.
+- Trello credentials (`x-trello-auth` / `Authorization`) are only ever sent to Trello hosts, including across redirects.
+- The proxy refuses all requests when `ALLOWED_ORIGIN_DOMAIN` is not configured.
+- The popup only plays attachments uploaded to Trello (`isUpload === true`), never link attachments.

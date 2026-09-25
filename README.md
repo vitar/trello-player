@@ -2,7 +2,7 @@
 
 Audio Player Power-Up is a custom Trello Power-Up that plays audio attachments on a board list.
 
-Attachments ending in `.m4a` or `.mp3` are grouped into a playlist.
+Uploaded attachments ending in `.m4a` or `.mp3` are grouped into a playlist.
 
 <img src="trello-player-v0.5-screenshot1.png" width="600">
 
@@ -48,7 +48,9 @@ processes those modules and writes the concatenated output to
 5. In a board list open the list menu (`...`) and select **Audio Player**.
 
 ## Usage
-- The popup displays all `.m4a` and `.mp3` attachments from cards in the list.
+- The popup displays all `.m4a` and `.mp3` files uploaded to cards in the list.
+  Link attachments (URLs pasted into a card) are ignored, because fetching them
+  would send your Trello credentials to a non-Trello host.
 - Use **Previous** and **Next** to navigate the playlist while the audio player plays each attachment.
 - Click the wrench next to the waveform area to adjust pitch shift.
 
@@ -68,8 +70,18 @@ The CORS proxy located in `src/cloudflare-worker-cors-proxy/index.js` can now be
 deployed automatically through Cloudflare's GitHub connector. The Worker reads
 an `ALLOWED_ORIGIN_DOMAIN` environment variable (a comma-separated list of
 domains) to decide which Trello Power-Up origins can use the proxy. If the
-variable is not set, it defaults to `yourdomain.com` so the previous manual
-behaviour still works.
+variable is not set or empty, the Worker refuses every request (HTTP 500) so a
+misconfigured deployment is never an open proxy.
+
+Security rules enforced by the Worker (tested in `test/cors-proxy.test.js`):
+
+- Only `https://` URLs on `trello.com` or `api.trello.com` can be proxied;
+  anything else gets HTTP 403.
+- Only `GET`, `HEAD` and `OPTIONS` are accepted.
+- The `x-trello-auth` header is sent upstream as `Authorization` only to Trello
+  hosts. Redirects are followed manually and the credentials are dropped when a
+  redirect leaves Trello (for example to a signed storage URL).
+- Upstream `Set-Cookie` headers and error details are not passed to the browser.
 
 1. Update `src/cloudflare-worker-cors-proxy/wrangler.toml` if required:
    - Change the `name` field to match your Worker name in Cloudflare.

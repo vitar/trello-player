@@ -2,14 +2,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SUPPORTED_AUDIO_EXTENSIONS,
-  isSupportedAttachment
+  isSupportedAttachment,
 } from '../src/trello-power-up/popup/attachment-filter.js';
 
 const trelloUpload = (name) => ({
   id: 'att1',
   name,
   isUpload: true,
-  url: `https://trello.com/1/cards/card1/attachments/att1/download/${name}`
+  url: `https://trello.com/1/cards/card1/attachments/att1/download/${name}`,
 });
 
 describe('isSupportedAttachment', () => {
@@ -34,12 +34,24 @@ describe('isSupportedAttachment', () => {
   });
 
   test('rejects attachments without a url', () => {
-    assert.equal(isSupportedAttachment({ id: 'x', name: 'song.mp3' }), false);
-    assert.equal(isSupportedAttachment({ id: 'x', name: 'song.mp3', url: null }), false);
+    assert.equal(isSupportedAttachment({ id: 'x', isUpload: true, name: 'song.mp3' }), false);
+    assert.equal(
+      isSupportedAttachment({ id: 'x', isUpload: true, name: 'song.mp3', url: null }),
+      false,
+    );
   });
 
-  // Known security gap from the production review: link attachments to
-  // external hosts are currently accepted, and the proxy forwards the user's
-  // Trello credentials to them. Convert to a real test when fixing it.
-  test.todo('rejects link attachments that are not Trello uploads');
+  // Link attachments can point anywhere; fetching them through the proxy would
+  // send the user's Trello credentials to that host.
+  test('rejects link attachments that are not Trello uploads', () => {
+    const link = { id: 'x', name: 'song.mp3', url: 'https://evil.example/song.mp3' };
+    assert.equal(isSupportedAttachment({ ...link, isUpload: false }), false);
+    assert.equal(isSupportedAttachment(link), false);
+    assert.equal(isSupportedAttachment({ ...link, isUpload: 'true' }), false);
+  });
+
+  test('rejects missing attachments', () => {
+    assert.equal(isSupportedAttachment(undefined), false);
+    assert.equal(isSupportedAttachment(null), false);
+  });
 });
